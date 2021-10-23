@@ -1,0 +1,23 @@
+program ::= <statement>+
+
+statement ::= <function> | <macro> | <extern>
+expression ::= <literal> | <while> | <if> | <block> | <intrinsic> | <identifier>
+
+function ::= 'def' <identifier> <expression>
+macro ::= 'macro' <identifier> <expression>
+extern ::= 'extern' <identifier>
+
+literal ::= INTEGER
+identifier ::= IDENTIFIER
+
+while ::= 'while' <expression> <expression>
+if ::= 'if' <expression> <expression>
+block ::= '{' <expression>+ '}'
+
+intrinsic ::= 'syscall' | <arithmetic> | <comparison> | <stack> | <logical> | <bitwise>
+
+arithmetic ::= '+' | '-' | '*' | '/' | '%' | '<<' | '>>'
+comparison ::= '<' | '>' | '=' | '<=' | '>=' | '!='
+stack ::= 'dup' | 'swap' | 'drop' | 'over'
+logical ::= 'and' | 'or' | 'not'
+bitwise ::= '&' | '|' | '~'

@@ -1,0 +1,36 @@
+macro MMAP 9
+macro MUNMAP 11
+macro WRITE 1
+
+macro mmap   { MMAP   @6 syscall }
+macro munmap { MUNMAP @2 syscall }
+macro write  { WRITE  @4 syscall }
+
+# print(buf, count)
+macro print { { @1 [] } 1 write }
+
+# malloc(len)
+macro malloc {
+	0 { 1 2 - } 34 3 { @4 [] } 0 mmap
+}
+
+# free(addr, len)
+macro free { swap munmap }
+
+macro pack_bytes {
+	0 | 8 << | 8 << | 8 << |
+	8 << | 8 << | 8 << | 8 << |
+}
+
+def main {
+	{word 3 *} malloc  # allocate 2 words (16 bytes)
+
+	# write string into allocated memory
+	dup      { 72  101 108 108 111 44 32 87 } pack_bytes store
+	dup 8 +  { 111 114 108 100 33  10 0  0  } pack_bytes store
+
+	# print the string
+	dup {@2 []} print
+	free
+}
+

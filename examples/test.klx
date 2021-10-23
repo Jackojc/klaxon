@@ -1,0 +1,19 @@
+# Takes one argument (the number of arguments to the syscall)
+# and then fills the empty arguments with zeros.
+# i.e: 60 1 sc -> 60 1 0 0 0 0 syscall
+macro sc {
+	5 swap - while { dup 1 != } {
+		1 swap - 0 swap
+	}
+
+	6@ syscall
+}
+
+# Takes one argument (the exit code) and performs
+# the exit syscall.
+macro EXIT 60
+macro exit { EXIT 1 sc }
+
+def main {
+	69 exit
+}

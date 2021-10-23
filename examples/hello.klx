@@ -1,0 +1,108 @@
+def main {
+#
+#   Using mmap syscall to allocate 512 bytes of memory.
+#
+#        addr
+#        |        length
+#        |        |    prot
+#        |        |    |                       flags
+#        |        |    |                       |                            fd
+#        |        |    |                       |                            |   offset
+#        |        |    |                       |                            |   |
+#        v~~~~~~  v~~  v~~~~~~~~~~~~~~~~~~~~~  v~~~~~~~~~~~~~~~~~~~~~~~~~~  v~  v
+#   mmap(nullptr, 512, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)
+#
+#   offset = 0
+#   | fd = -1
+#   | |         flags = MAP_ANONYMOUS | MAP_PRIVATE
+#   | |         |  prot = PROT_READ | PROT_WRITE
+#   | |         |  | length = 512
+#   | |         |  | |   addr = nullptr
+#   | |         |  | |   | id (mmap = 9)
+#   | |         |  | |   | |
+#   | |         |  | |   | | 6 arg syscall
+#   | |         |  | |   | | |
+#   v v~~~~~~~~ v~ v v~~ v v v~~~~~~~~~
+    0 { 1 2 - } 34 3 512 0 9 @6 syscall
+#
+#   Bit hacking to pack `Hello, W` into a uint64_t.
+#
+#   'H' | ('e' << 8) | ('l' << 16) | ('l' << 24) | ('o' << 32) | (',' << 40) | (' ' << 48) | ('W' << 56);
+#
+    72          # H
+    101 8  << | # e
+    108 16 << | # l
+    108 24 << | # l
+    111 32 << | # o
+    44  40 << | # ,
+    32  48 << | #
+    87  56 << | # W
+#
+#   The stack at this point looks like: [ address, value ]
+#   Since we need to keep address around for later, we need to find a way
+#   to duplicate it.
+#
+#   Using `over swap` we can do just that.
+#     `over` copies the second element from the top of the stack to the top of the stack. ( a b -> a b a )
+#     `swap` swaps the top 2 elements on the stack. ( a b -> b a )
+#
+    over swap
+#
+#   After applying these operations to the stack we get:
+#     over -> [ address, value, address ]
+#     swap -> [ address, address, value ]
+#
+#   Current stack: [ address, address, value ]
+#
+#   `store` consumes 2 arguments: an address and a value and stores the value
+#   to the given address. ( addr val -> )
+#
+#   *addr = value;
+#
+    store
+#
+#   Current stack: [ address ]
+#
+#   Now that we have written the first part ouf our string, we need to write
+#   the remaining parts.
+#
+#   We duplicated the address and add 8 to it. (A word on x64 is 8 bytes)
+#     `dup` duplicates the top element of the stack. ( a -> a a )
+#
+    dup 8 +
+#
+#   Current stack: [ address, address+8 ]
+#
+#   We do a similar operation as before by packing our bytes into a word.
+#
+    111         # o
+    114 8  << | # r
+    108 16 << | # l
+    100 24 << | # d
+    33  32 << | # !
+    10  40 << | # \n
+#
+#   Current stack: [ address, address+8, value ]
+#
+#   We `store` this value to the address with the offset of 8.
+#
+    store
+#
+#   Current stack: [ address ]
+#
+#   Using write syscall to output our string to stdout.
+#
+#   We push our string length (14) and then have to `swap` to
+#   get the arguments in the right order.
+#
+#   Current stack: [ strlen, address ]
+#
+#   count = 14
+#   |  buffer = address
+#   |  |    fd = stdout
+#   |  |    | id (write = 1)
+#   |  |    | | 4 arg syscal
+#   |  |    | | |
+#   v~ v~~~ v v v~~~~~~~~~
+    14 swap 1 1 @4 syscall
+}
