@@ -1,13 +1,15 @@
 CXX ?= clang++
-CXXWARN ?= -Werror -Wall -Wextra -Wno-unused -pedantic
+CXXWARN ?= -Werror -Wall -Wextra -Wno-unused -pedantic -Wno-unused-parameter
 
 CXXSTD ?= c++17
-SRC=src/main.cpp
 
-CXXFLAGS+=-fno-exceptions -fno-rtti
+SRC_KLX=src/main.cpp
+SRC_OPT=src/opt.cpp
 
 BUILD_DIR=build
-TARGET=klx
+
+TARGET_KLX=klx
+TARGET_OPT=opt
 
 # Libraries to include and link
 INC=-Iinc/ -Isrc/
@@ -21,7 +23,7 @@ san ?= no
 ifeq ($(dbg),no)
 	CXXFLAGS+=-O3 -march=native -flto -DNDEBUG -s
 else ifeq ($(dbg),yes)
-	CXXFLAGS+=-Og -g -march=native -fno-omit-frame-pointer
+	CXXFLAGS+=-g -fno-omit-frame-pointer
 else
 $(error dbg should be either yes or no)
 endif

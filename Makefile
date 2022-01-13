@@ -4,7 +4,7 @@
 
 include config.mk
 
-all: options klaxon
+all: options compiler optimiser
 
 config:
 	@mkdir -p $(BUILD_DIR)
@@ -15,9 +15,15 @@ options:
 	@printf "san \033[32m$(san)\033[0m | "
 	@printf "cflags \033[32m-std=$(CXXSTD) $(CXXFLAGS)\033[0m\n"
 
-klaxon: config
+compiler: config
+	@printf "cc main.cpp\n"
 	@$(CXX) -std=$(CXXSTD) $(CXXWARN) $(CXXFLAGS) $(LDFLAGS) $(CPPFLAGS) $(INC) \
-		$(LIBS) -o $(BUILD_DIR)/$(TARGET) $(SRC)
+		$(LIBS) -o $(BUILD_DIR)/$(TARGET_KLX) $(SRC_KLX)
+
+optimiser: config
+	@printf "cc opt.cpp\n"
+	@$(CXX) -std=$(CXXSTD) $(CXXWARN) $(CXXFLAGS) $(LDFLAGS) $(CPPFLAGS) $(INC) \
+		$(LIBS) -o $(BUILD_DIR)/$(TARGET_OPT) $(SRC_OPT)
 
 clean:
 	rm -rf $(BUILD_DIR)/ *.gcda
