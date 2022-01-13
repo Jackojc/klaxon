@@ -1,23 +1,60 @@
+// TOKENS
+int ::= ? [0-9_]+ ? | ? 0x[0-9A-z_]+ ? | ? 0b[0-1_]+ ? | ? 0o[0-7_]+ ?
+char ::= "'" ? . ?
+string ::= '"' ? .+ ? '"'
+literal ::= <int> | <char> | <string>
+identifier ::= ? \S+ ?
+comment ::= ? #.+$ ?
+
+
+// INTERMEDIATE RULES
 program ::= <statement>+
 
-statement ::= <function> | <macro> | <extern>
-expression ::= <literal> | <while> | <if> | <block> | <intrinsic> | <identifier>
+statement ::= <def> | <decl>
+expression ::= (
+		<literal> |
+		<while> |
+		<block> |
+		<if> |
+		<intrinsic> |
+		<identifier>
+	)
 
-function ::= 'def' <identifier> <expression>
-macro ::= 'macro' <identifier> <expression>
-extern ::= 'extern' <identifier>
 
-literal ::= INTEGER
-identifier ::= IDENTIFIER
+// MISC
+effect ::= '(' <identifier>* [ '->' <identifier>* ] ')'  // ( x y -> z )
 
+
+// STATEMENTS
+// def neg { { 1 2 - } * }
+def ::= 'def' <identifier> <expression>
+
+// decl foo (int int -> int)
+decl ::= 'decl' <identifier> <effect>
+
+
+// EXPRESSIONS
+// if =1 { "true" print } { "false" print }
+if ::= 'if' <expression> <expression> [ 'else' <expression> ]
+
+// while { dup 10 < }
+//   ++
 while ::= 'while' <expression> <expression>
-if ::= 'if' <expression> <expression>
+
+// { foo bar }
 block ::= '{' <expression>+ '}'
 
-intrinsic ::= 'syscall' | <arithmetic> | <comparison> | <stack> | <logical> | <bitwise>
 
-arithmetic ::= '+' | '-' | '*' | '/' | '%' | '<<' | '>>'
-comparison ::= '<' | '>' | '=' | '<=' | '>=' | '!='
-stack ::= 'dup' | 'swap' | 'drop' | 'over'
-logical ::= 'and' | 'or' | 'not'
-bitwise ::= '&' | '|' | '~'
+// INSTRINSICS
+ops ::= (
+		'+' | '-' | '*' | '/' | '%' | '<<' | '>>' |
+		'<' | '>' | '=' |
+		'and' | 'or' | 'not' | 'xor' |
+		'&' | '|' | '~' | '^' |
+		'word'
+	)
+
+// at @3
+intrinsic ::= <ops> | <arg_intrinsic>
+arg_intrinsic ::= ( 'at' | 'rot' | 'drop' ) <literal>
+

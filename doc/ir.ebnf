@@ -1,0 +1,17 @@
+// TOKENS
+int ::= ? [0-9_]+ ? | ? 0x[0-9A-z_]+ ? | ? 0b[0-1_]+ ? | ? 0o[0-7_]+ ?
+identifier ::= ? \S+ ?
+comment ::= ? #.+$ ?
+
+
+// GRAMMAR
+def ::= 'def' <identifier> <block>+ 'ret'
+block ::= 'block' <int> <instruction>+ 'end'
+
+instruction ::=
+	( 'at' | 'drop' | 'rot' | 'push' | 'arg' | 'out' | 'jump' ) <int> |
+	'branch' <int> <int> |
+	'call' <identifier>
+
+program ::= <def> | <block>
+
