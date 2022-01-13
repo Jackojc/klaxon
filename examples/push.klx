@@ -3,19 +3,21 @@ macro cube   { dup dup * * }
 macro even? { 2 % 0 = }
 macro odd?  { 2 % 1 = }
 
+macro neg { { 1 2 - } * }
+
 macro EXIT 60
 macro MMAP 9
 macro MUNMAP 11
 macro READ 0
 macro WRITE 1
 
-macro syscall0 { @0 syscall }
-macro syscall1 { @1 syscall }
-macro syscall2 { @2 syscall }
-macro syscall3 { @3 syscall }
-macro syscall4 { @4 syscall }
-macro syscall5 { @5 syscall }
-macro syscall6 { @6 syscall }
+macro syscall0 { (0)syscall }
+macro syscall1 { (1)syscall }
+macro syscall2 { (2)syscall }
+macro syscall3 { (3)syscall }
+macro syscall4 { (4)syscall }
+macro syscall5 { (5)syscall }
+macro syscall6 { (6)syscall }
 
 macro exit   { EXIT syscall1 }
 macro mmap   { MMAP syscall6 }
@@ -23,14 +25,14 @@ macro munmap { MUNMAP syscall2 }
 macro write  { WRITE syscall4 }
 
 macro print {
-	{ @1 [] } 1 write swap drop
+	swap 1 write
 }
 
 macro malloc {
-	0 { 1 2 - } 34 3 { @4 [] } 0 mmap swap drop
+	0 1 neg 34 3 { (4)at } 0 mmap nip
 }
 
-macro free { { @1 [] } munmap }
+macro free { { (1)at } munmap }
 
 macro pack_bytes {
 	0 | 8 << | 8 << | 8 << |
@@ -38,13 +40,11 @@ macro pack_bytes {
 }
 
 def main {
-	{word word +} malloc # allocate 2 words (16 bytes)
+	{word 2 *} malloc
 
-	# write string into allocated memory
 	dup      { 72  101 108 108 111 44 32 87 } pack_bytes store
-	dup 8 +  { 111 114 108 100 33  10 0  0  } pack_bytes store
+	# dup 8 +  { 111 114 108 100 33  10 0  0  } pack_bytes store
 
-	# print the string
-	dup {@2 []} print
-	free
+	print
+	# free
 }
