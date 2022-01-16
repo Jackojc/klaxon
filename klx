@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+
+artifacts="build"
+file="a.out"
+
+# set -xe
+cat $@ | m4 -P | ./build/klx | ./build/opt > "$artifacts/$file.kir"
+# cat $@ | m4 -P | ./build/klx > "$artifacts/$file.kir"
+
+# nasm -felf64 -o "$artifacts/$file.o" "$file.asm"
+# ld.lld -s -n --gc-sections --lto-O3 -O3 -o "$artifacts/$file" "$artifacts/$file.o"
+# strip -R .note -R .comment -X -x -s "$artifacts/$file"

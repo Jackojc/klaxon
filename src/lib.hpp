@@ -49,9 +49,9 @@ template <typename... Ts>
 	\
 	X(STACK_TKN_DEF,        def) \
 	X(STACK_TKN_BLOCK,      block) \
-	X(STACK_TKN_AT,         at) \
-	X(STACK_TKN_ROT,        rot) \
-	X(STACK_TKN_DROP,       drop) \
+	X(STACK_TKN_COPY,       copy) \
+	X(STACK_TKN_MOVE,       move) \
+	X(STACK_TKN_REMOVE,     remove) \
 	X(STACK_TKN_PUSH,       push) \
 	X(STACK_TKN_ARG,        arg) \
 	X(STACK_TKN_OUT,        out) \
@@ -150,7 +150,6 @@ struct Lexer {
 			if      (view == "while"_sv) kind = Tokens::TKN_WHILE;
 			else if (view == "if"_sv)    kind = Tokens::TKN_IF;
 			else if (view == "def"_sv)   kind = Tokens::TKN_DEF;
-			else if (view == "if"_sv)    kind = Tokens::TKN_IF;
 			else if (view == "else"_sv)  kind = Tokens::TKN_ELSE;
 			else if (view == "decl"_sv)  kind = Tokens::TKN_DECL;
 
@@ -235,9 +234,9 @@ struct StackLexer {
 
 			if      (view == "def"_sv)    kind = Tokens::STACK_TKN_DEF;
 			else if (view == "block"_sv)  kind = Tokens::STACK_TKN_BLOCK;
-			else if (view == "at"_sv)     kind = Tokens::STACK_TKN_AT;
-			else if (view == "drop"_sv)   kind = Tokens::STACK_TKN_DROP;
-			else if (view == "rot"_sv)    kind = Tokens::STACK_TKN_ROT;
+			else if (view == "copy"_sv)   kind = Tokens::STACK_TKN_COPY;
+			else if (view == "remove"_sv) kind = Tokens::STACK_TKN_REMOVE;
+			else if (view == "move"_sv)   kind = Tokens::STACK_TKN_MOVE;
 			else if (view == "push"_sv)   kind = Tokens::STACK_TKN_PUSH;
 			else if (view == "arg"_sv)    kind = Tokens::STACK_TKN_ARG;
 			else if (view == "out"_sv)    kind = Tokens::STACK_TKN_OUT;
@@ -276,9 +275,9 @@ inline std::ostream& operator<<(std::ostream& os, StackEffect se) {
 	X(OP_PUSH,   push) \
 	X(OP_ARG,    arg) \
 	X(OP_OUT,    out) \
-	X(OP_AT,     at) \
-	X(OP_ROT,    rot) \
-	X(OP_DROP,   drop) \
+	X(OP_COPY,   copy) \
+	X(OP_MOVE,   move) \
+	X(OP_REMOVE, remove) \
 	X(OP_CALL,   call) \
 	X(OP_DEF,    def) \
 	X(OP_RET,    ret) \
@@ -339,6 +338,7 @@ struct Context: Lexer {
 	size_t block_id = 0;
 	size_t out_id = 0;
 	size_t stack = 0;
+
 	IR instructions;
 	Effects effects;
 
@@ -347,28 +347,28 @@ struct Context: Lexer {
 		Lexer::Lexer(src)
 	{
 		effects = {
-			{ "add"_sv,  { 2, 1 } },
-			{ "sub"_sv,  { 2, 1 } },
-			{ "mul"_sv,  { 2, 1 } },
-			{ "div"_sv,  { 2, 1 } },
-			{ "mod"_sv,  { 2, 1 } },
-			{ "lsh"_sv,  { 2, 1 } },
-			{ "rsh"_sv,  { 2, 1 } },
-			{ "lt"_sv,   { 2, 1 } },
-			{ "mt"_sv,   { 2, 1 } },
-			{ "eq"_sv,   { 2, 1 } },
-			{ "and"_sv,  { 2, 1 } },
-			{ "or"_sv,   { 2, 1 } },
-			{ "not"_sv,  { 2, 1 } },
-			{ "xor"_sv,  { 2, 1 } },
-			{ "band"_sv, { 2, 1 } },
-			{ "bor"_sv,  { 2, 1 } },
-			{ "bnot"_sv, { 2, 1 } },
-			{ "bxor"_sv, { 2, 1 } },
-			{ "word"_sv, { 0, 1 } },
-			{ "drop"_sv, { 1, 0 } },
-			{ "at"_sv,   { 1, 1 } },
-			{ "rot"_sv,  { 1, 0 } },
+			// { "add"_sv,  { 2, 1 } },
+			// { "sub"_sv,  { 2, 1 } },
+			// { "mul"_sv,  { 2, 1 } },
+			// { "div"_sv,  { 2, 1 } },
+			// { "mod"_sv,  { 2, 1 } },
+			// { "lsh"_sv,  { 2, 1 } },
+			// { "rsh"_sv,  { 2, 1 } },
+			// { "lt"_sv,   { 2, 1 } },
+			// { "mt"_sv,   { 2, 1 } },
+			// { "eq"_sv,   { 2, 1 } },
+			// { "and"_sv,  { 2, 1 } },
+			// { "or"_sv,   { 2, 1 } },
+			// { "not"_sv,  { 2, 1 } },
+			// { "xor"_sv,  { 2, 1 } },
+			// { "band"_sv, { 2, 1 } },
+			// { "bor"_sv,  { 2, 1 } },
+			// { "bnot"_sv, { 2, 1 } },
+			// { "bxor"_sv, { 2, 1 } },
+			// { "word"_sv, { 0, 1 } },
+			{ "rm"_sv,   { 1, 0 } },
+			{ "copy"_sv, { 1, 1 } },
+			{ "move"_sv, { 1, 0 } },
 		};
 	}
 
@@ -442,9 +442,9 @@ constexpr auto is_type_annotation = equal(Tokens::TKN_LPAREN);
 constexpr auto is_block = equal(Tokens::TKN_LBRACE);
 
 constexpr auto stack_is_instruction = partial_eq_any(
-	Tokens::STACK_TKN_AT,
-	Tokens::STACK_TKN_DROP,
-	Tokens::STACK_TKN_ROT,
+	Tokens::STACK_TKN_COPY,
+	Tokens::STACK_TKN_REMOVE,
+	Tokens::STACK_TKN_MOVE,
 	Tokens::STACK_TKN_PUSH,
 	Tokens::STACK_TKN_ARG,
 	Tokens::STACK_TKN_OUT,
@@ -505,9 +505,9 @@ inline void stack_parse_identifier(StackContext& ctx) {
 	Token tok = ctx.next();  // skip identifier
 
 	switch (tok.kind) {
-		case Tokens::STACK_TKN_AT:
-		case Tokens::STACK_TKN_DROP:
-		case Tokens::STACK_TKN_ROT:
+		case Tokens::STACK_TKN_COPY:
+		case Tokens::STACK_TKN_REMOVE:
+		case Tokens::STACK_TKN_MOVE:
 		case Tokens::STACK_TKN_PUSH:
 		case Tokens::STACK_TKN_ARG:
 		case Tokens::STACK_TKN_OUT:
@@ -518,13 +518,13 @@ inline void stack_parse_identifier(StackContext& ctx) {
 			Ops op;
 
 			switch (tok.kind) {
-				case Tokens::STACK_TKN_AT:   op = Ops::OP_AT;   break;
-				case Tokens::STACK_TKN_DROP: op = Ops::OP_DROP; break;
-				case Tokens::STACK_TKN_ROT:  op = Ops::OP_ROT;  break;
-				case Tokens::STACK_TKN_PUSH: op = Ops::OP_PUSH; break;
-				case Tokens::STACK_TKN_ARG:  op = Ops::OP_ARG;  break;
-				case Tokens::STACK_TKN_OUT:  op = Ops::OP_OUT;  break;
-				case Tokens::STACK_TKN_JUMP: op = Ops::OP_JUMP; break;
+				case Tokens::STACK_TKN_COPY:   op = Ops::OP_COPY;   break;
+				case Tokens::STACK_TKN_REMOVE: op = Ops::OP_REMOVE; break;
+				case Tokens::STACK_TKN_MOVE:   op = Ops::OP_MOVE;  break;
+				case Tokens::STACK_TKN_PUSH:   op = Ops::OP_PUSH; break;
+				case Tokens::STACK_TKN_ARG:    op = Ops::OP_ARG;  break;
+				case Tokens::STACK_TKN_OUT:    op = Ops::OP_OUT;  break;
+				case Tokens::STACK_TKN_JUMP:   op = Ops::OP_JUMP; break;
 
 				default:
 					op = Ops::OP_NONE;
@@ -593,7 +593,7 @@ inline void parse_call(Context& ctx) {
 	View name = ctx.next().view;
 
 	// Argument intrinsics.
-	if (eq_any(name, "at"_sv, "rot"_sv, "drop"_sv)) {
+	if (eq_any(name, "cp"_sv, "mv"_sv, "rm"_sv)) {
 		ctx.expect_token(equal(Tokens::TKN_NUM), ctx.peek().view, STR_ARG, name);
 
 		size_t arg = to_int(ctx.next().view);
@@ -601,18 +601,18 @@ inline void parse_call(Context& ctx) {
 
 		ctx.expect_effect(more_equal(arg + 1), name, STR_EFFECT, arg + 1, ctx.stack);
 
-		if (name == "at"_sv) {
-			kind = Ops::OP_AT;
+		if (name == "cp"_sv) {
+			kind = Ops::OP_COPY;
 			ctx.stack++;
 		}
 
-		else if (name == "drop"_sv) {
-			kind = Ops::OP_DROP;
-			ctx.stack--;
+		else if (name == "mv"_sv) {
+			kind = Ops::OP_MOVE;
 		}
 
-		else if (name == "rot"_sv) {
-			kind = Ops::OP_ROT;
+		else if (name == "rm"_sv) {
+			kind = Ops::OP_REMOVE;
+			ctx.stack--;
 		}
 
 		ctx.instruction(kind, arg);
@@ -772,6 +772,9 @@ inline StackEffect parse_annotation(Context& ctx) {
 		if (ctx.peek().kind == Tokens::TKN_ARROW) {
 			ctx.next();  // skip `->`
 			ptr = &out;
+
+			if (ctx.peek().kind == Tokens::TKN_RPAREN)
+				break;
 		}
 
 		ctx.expect_token(equal(Tokens::TKN_IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
@@ -792,7 +795,7 @@ inline void parse_decl(Context& ctx) {
 	ctx.expect_token(equal(Tokens::TKN_IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
 	View name = ctx.next().view;
 
-	ctx.expect_token(is_type_annotation, ctx.peek().view, STR_EXPECT, "type annotation"_sv);
+	ctx.expect_token(is_type_annotation, ctx.peek().view, STR_ANNOTATION);
 	StackEffect se = parse_annotation(ctx);
 
 	// Store type signature.
@@ -802,6 +805,7 @@ inline void parse_decl(Context& ctx) {
 
 inline void parse_def(Context& ctx) {
 	ctx.out_id = 0; // Reset function local return IDs.
+	ctx.stack = 0;
 
 	ctx.next();  // skip `def`
 
@@ -826,7 +830,6 @@ inline void parse_def(Context& ctx) {
 	parse_expression(ctx);
 
 	ctx.expect_effect(equal(out), name, STR_EFFECT_RETURN, out, ctx.stack);
-	ctx.stack = 0;
 
 	ctx.instruction(Ops::OP_END);
 	ctx.instruction(Ops::OP_RET);
@@ -856,26 +859,26 @@ inline void parse_program(Context& ctx) {
 namespace klx {
 
 inline std::ostream& operator<<(std::ostream& os, klx::Op instr) {
-	out(os, instr.kind, " ");
+	out(os, instr.kind);
 
 	switch (instr.kind) {
 		case Ops::OP_NONE:
 		case Ops::OP_PUSH:
 		case Ops::OP_ARG:
 		case Ops::OP_OUT:
-		case Ops::OP_AT:
-		case Ops::OP_ROT:
-		case Ops::OP_DROP:
+		case Ops::OP_COPY:
+		case Ops::OP_MOVE:
+		case Ops::OP_REMOVE:
 		case Ops::OP_JUMP:
 		case Ops::OP_BLOCK:
-			out(os, instr.x); break;
+			out(os, " ", instr.x); break;
 
 		case Ops::OP_CALL:
 		case Ops::OP_DEF:
-			outfmt(os, "{}", instr.sv); break;
+			outfmt(os, " {}", instr.sv); break;
 
 		case Ops::OP_BRANCH:
-			outfmt(os, "{} {}", instr.x, instr.y); break;
+			outfmt(os, " {} {}", instr.x, instr.y); break;
 
 		case Ops::OP_RET:
 		default: break;

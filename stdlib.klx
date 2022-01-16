@@ -1,0 +1,233 @@
+decl main ( -> ret )
+
+decl dup ( a -> a a )
+def dup cp 0
+
+decl dup2 ( a b -> a b a b )
+def dup2 {
+	cp 1
+	cp 1
+}
+
+decl over ( a b -> a b a )
+def over cp 1
+
+decl over2 ( a b c d -> a b c d a b )
+def over2 {
+	cp 3
+	cp 3
+}
+
+decl swap ( a b -> b a )
+def swap mv 1
+
+decl swap2 ( a b c d -> c d a b )
+def swap2 {
+	cp 3
+	cp 3
+	rm 4
+	rm 4
+}
+
+decl drop ( a -> )
+def drop rm 0
+
+decl drop2 ( a b -> )
+def drop2 {
+	rm 0
+	rm 0
+}
+
+decl rotl ( a b c -> b c a )
+def rotl {
+	mv 2
+}
+
+decl rotl2 ( a b c d e f -> c d e f a b )
+def rotl2 {
+	mv 5
+	mv 5
+}
+
+decl rotr ( a b c -> c a b )
+def rotr {
+	mv 2
+	mv 2
+}
+
+decl rotr2 ( a b c d e f -> e f a b c d )
+def rotr2 {
+	mv 5
+	mv 5
+	mv 5
+	mv 5
+}
+
+decl nip ( a b -> b )
+def nip rm 1
+
+decl nip2 ( a b c -> c )
+def nip2 {
+	rm 1
+	rm 1
+}
+
+decl tuck ( a b -> b a b )
+def tuck {
+	over
+	over
+	rm 3
+}
+
+decl tuck2 ( a b c d -> c d a b c d )
+def tuck2 {
+	mv 3
+	mv 3
+	over2
+}
+
+decl add ( a b -> q )
+decl sub ( a b -> q )
+decl mul ( a b -> q )
+decl div ( a b -> q )
+decl mod ( a b -> q )
+
+decl lsh ( a b -> q )
+decl rsh ( a b -> q )
+
+decl and ( a b -> q )
+decl or ( a b -> q )
+decl xor ( a b -> q )
+decl not ( a -> a )
+
+decl band ( a b -> q )
+decl bor ( a b -> q )
+decl bxor ( a b -> q )
+decl bnot ( a -> a )
+
+decl + ( a b -> q )
+decl - ( a b -> q )
+decl * ( a b -> q )
+decl / ( a b -> q )
+decl % ( a b -> q )
+
+decl << ( a b -> q )
+decl >> ( a b -> q )
+
+decl & ( a b -> q )
+decl | ( a b -> q )
+decl ^ ( a b -> q )
+decl ~ ( a -> a )
+
+def + add
+def - sub
+def * mul
+def / div
+def % mod
+
+def << lsh
+def >> rsh
+
+def & band
+def | bor
+def ^ bxor
+def ~ bnot
+
+decl word ( -> a )
+
+decl eq ( a b -> q )
+decl lt ( a b -> q )
+decl gt ( a b -> q )
+decl lte ( a b -> q )
+decl gte ( a b -> q )
+
+decl = ( a b -> q )
+decl < ( a b -> q )
+decl > ( a b -> q )
+decl <= ( a b -> q )
+decl >= ( a b -> q )
+
+def = eq
+def < lt
+def > gt
+def <= lte
+def >= gte
+
+decl neg ( a -> a )
+decl abs ( a -> a )
+decl pow ( a -> a )
+
+decl ** ( a -> a )
+def ** pow
+
+decl inc ( a -> a )
+decl dec ( a -> a )
+decl ++ ( a -> a )
+decl -- ( a -> a )
+
+def inc { 1 + }
+def dec { 1 - }
+def ++ inc
+def -- dec
+
+decl min ( a b -> q )
+decl max ( a b -> q )
+
+decl true ( -> a )
+decl false ( -> a )
+
+def true 1
+def false 0
+
+decl =true ( a -> a )
+decl =false ( a -> a )
+
+def =true { true eq }
+def =false { false eq }
+
+decl =0 ( a -> a )
+decl !=0 ( a -> a )
+decl >0 ( a -> a )
+decl <0 ( a -> a )
+decl >=0 ( a -> a )
+decl <=0 ( a -> a )
+
+def =0 { 0 eq not }
+def !=0 { 0 eq }
+def >0 { 0 gt }
+def <0 { 0 lt }
+def >=0 { 0 gte }
+def <=0 { 0 lte }
+
+decl +? ( a -> a )
+decl -? ( a -> a )
+
+def +? >0
+def -? <0
+
+decl both ( a b -> q )
+decl neither ( a b -> q )
+decl either ( a b -> q )
+
+def both {
+	=true
+	swap
+	=true
+	eq
+}
+
+def neither {
+	=false
+	swap
+	=false
+	eq
+}
+
+def either {
+	=true
+	swap
+	=true
+	or
+}
+
+

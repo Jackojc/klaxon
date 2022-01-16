@@ -1,4 +1,4 @@
-# klax syntax highlighting for kakoune
+# klaxon syntax highlighting for kakoune
 
 provide-module -override klx %{
 	add-highlighter shared/klx regions
@@ -13,7 +13,7 @@ provide-module -override klx %{
 	add-highlighter shared/klx/other/ regex %{@\b([_0-9]+|0x[_0-9a-fA-F]+|0b[_01]+)} 0:value
 
 	# keywords and operators
-	add-highlighter shared/klx/other/ regex "\b(as|rot|at|drop|while|if|else|def|decl)\b" 0:keyword
+	add-highlighter shared/klx/other/ regex "\b(mv|cp|rm|while|if|else|def|decl)\b" 0:keyword
 
 	# string
 	add-highlighter shared/klx/string region '"' (?<!\\)(\\\\)*" group

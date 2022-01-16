@@ -26,6 +26,7 @@ namespace klx {
 	constexpr View STR_INT               = "expecting an integer"_sv;
 	constexpr View STR_IDENTIFIER        = "expecting an identifier"_sv;
 	constexpr View STR_INSTRUCTION       = "expecting an instruction"_sv;
+	constexpr View STR_ANNOTATION        = "expecting an effect annotation"_sv;
 
 	constexpr View STR_ENCODING          = "invalid source encoding"_sv;
 
