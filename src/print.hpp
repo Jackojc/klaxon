@@ -46,9 +46,6 @@ namespace klx {
 		inline std::ostream& outfmt(std::ostream& os, View& fmt, T&& arg) {
 			View view {};
 
-			// auto& [sbegin, send] = fmt;
-			// auto& [begin, end] = view;
-
 			bool have_left  = false;
 			bool have_right = false;
 
@@ -62,11 +59,21 @@ namespace klx {
 					const View cmp = chr;
 					view = consume_view(fmt, chr, equal(cmp));
 
-					if      (view == "{{") out(os, "{");
-					else if (view == "}}") out(os, "}");
+					// Check if we have any pairs and if we have any
+					// valid placeholders.
+					size_t has_single = (view.size() % 2) == 1;
+					size_t pairs = view.size() / 2;
 
-					else if (view == "{") have_left  = true;
-					else if (view == "}") have_right = true;
+					have_left  = (has_single and cmp == "{"_sv) or have_left;
+					have_right = (has_single and cmp == "}"_sv) or have_right;
+
+					// If we have a pair, print the next variadic argument.
+					if (have_left and have_right)
+						out(os, std::forward<T>(arg));
+
+					// Print pairs which escape placeholders.
+					for (size_t i = 0; i < pairs; ++i)
+						out(os, cmp);
 				}
 
 				else {
@@ -74,10 +81,11 @@ namespace klx {
 					out(os, view);
 				}
 
-				if (have_left and have_right) {
-					out(os, std::forward<T>(arg));
+				// If we have printed one of the variadic arguments, break so we
+				// can consume the next variadic argument. Otherwise we would
+				// print the same argument for every placeholder.
+				if (have_left and have_right)
 					break;
-				}
 			}
 
 			return os;
