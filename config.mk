@@ -5,11 +5,13 @@ CXXSTD ?= c++17
 
 SRC_KLX=src/main.cpp
 SRC_OPT=src/opt.cpp
+SRC_CFG=src/cfg.cpp
 
 BUILD_DIR=build
 
 TARGET_KLX=klx
 TARGET_OPT=opt
+TARGET_CFG=cfg
 
 # Libraries to include and link
 INC=-Iinc/ -Isrc/
