@@ -85,18 +85,13 @@ void opt_function_inlining(IR& ir) {
 			if (end_it->kind != Ops::OP_RET)
 				continue;
 
-			do {
-				it->kind = Ops::OP_NONE;
-				++it;
-			} while (it->kind == Ops::OP_OUT);
+			it->kind = Ops::OP_NONE;
+			++it;
 
 			begin_it++;  // Skip `def`
 
 			++begin_it;  // Skip `block`
 			--end_it;    // Skip `end`
-
-			while (begin_it->kind == Ops::OP_ARG)
-				++begin_it;
 
 			size_t length = std::distance(begin_it, end_it);
 
@@ -164,36 +159,106 @@ inline void opt_const_fold(IR& ir) {
 		std::vector<IR::iterator> pushes;
 
 		while (eq_none(it->kind, Ops::OP_END, Ops::OP_RET)) {
-			if (eq_any(it->kind, Ops::OP_PUSH, Ops::OP_ARG, Ops::OP_OUT))
+			if (it->kind == Ops::OP_PUSH)
 				pushes.emplace_back(it);
 
-			else if (it->kind == Ops::OP_AT) {
+			// Do not allow folding beyond a call boundary.
+			// This is because a function may produce a
+			// number of values at runtime and we cannot
+			// know this at compile time.
+			else if (it->kind == Ops::OP_CALL)
+				pushes.clear();
+
+			else if (it->kind == Ops::OP_COPY) {
 				// Set current instruction to the instruction
-				// pointed to by `at`.
-				*it = **(pushes.rbegin() + it->x);
-				continue;  // Skip ++it
+				// pointed to by `cp`.
+				if (it->x + 1 <= pushes.size()) {
+					*it = **(pushes.rbegin() + it->x);
+					continue;  // Skip ++it
+				}
 			}
 
-			else if (it->kind == Ops::OP_ROT) {
+			else if (it->kind == Ops::OP_MOVE) {
 				// Swap instructions at TOS and instruction
 				// pointed to by `rot`.
-				std::swap(**pushes.rbegin(), **(pushes.rbegin() + it->x));
-				it->kind = Ops::OP_NONE;  // Remove `rot`
+				if (it->x + 1 <= pushes.size()) {
+					it->kind = Ops::OP_NONE;  // Remove `mv`
+					std::rotate(pushes.rbegin(), pushes.rbegin() + it->x, pushes.rbegin() + it->x + 1);
+				}
 			}
 
-			else if (it->kind == Ops::OP_DROP) {
-				auto push_it = pushes.rbegin() + it->x;
-				auto instr_it = *push_it;
+			else if (it->kind == Ops::OP_REMOVE) {
+				if (it->x + 1 <= pushes.size()) {
+					auto push_it = pushes.rbegin() + it->x;
+					auto instr_it = *push_it;
 
-				// Set instruction pointed to by `drop` to noop.
-				instr_it->kind = Ops::OP_NONE;
-				it->kind = Ops::OP_NONE;  // Remove `drop`
+					// Set instruction pointed to by `rm` to noop.
+					instr_it->kind = Ops::OP_NONE;
+					it->kind = Ops::OP_NONE;  // Remove `rm`
 
-				// Erase corresponding entry in `pushes`.
-				pushes.erase(std::next(push_it).base());
+					// Erase corresponding entry in `pushes`.
+					pushes.erase(std::next(push_it).base());
+				}
 			}
 
 			++it;
+		}
+	}
+}
+
+// Eliminate indirect jumps due to if/else chains.
+inline void opt_indirect_branch_elimination(IR& ir) {
+	for (auto it = ir.begin(); it != ir.end(); ++it) {
+		if (it->kind != Ops::OP_DEF)
+			continue;
+
+		auto def = it++;
+		std::vector<IR::iterator> branches;
+
+		for (; it->kind != Ops::OP_RET; ++it) {
+			if (eq_any(it->kind, Ops::OP_BRANCH, Ops::OP_JUMP))
+				branches.emplace_back(it);
+
+			else if (it->kind != Ops::OP_BLOCK)
+				continue;
+
+			// Start of a basic block.
+			auto block = it++;
+
+			if (it->kind != Ops::OP_JUMP)
+				continue;
+
+			auto jump = it++;
+
+			if (it->kind != Ops::OP_END)
+				continue;
+
+			auto end = it;
+
+			// Candidate for removal.
+			size_t block_id = block->x;
+			size_t jump_id = jump->x;
+
+			// Loop backwards through branches.
+			for (auto branch_it: branches) {
+				if (branch_it->kind == Ops::OP_BRANCH) {
+					if (branch_it->x == block_id) {
+						branch_it->x = jump_id;
+					}
+
+					else if (branch_it->y == block_id) {
+						branch_it->y = jump_id;
+					}
+				}
+
+				else if (branch_it->kind == Ops::OP_JUMP and branch_it->x == block_id) {
+					branch_it->x = jump_id;
+				}
+			}
+
+			block->kind = Ops::OP_NONE;
+			jump->kind = Ops::OP_NONE;
+			end->kind = Ops::OP_NONE;
 		}
 	}
 }
@@ -211,14 +276,24 @@ int main(int argc, const char* argv[]) {
 		if (not klx::utf_validate(src))
 			ctx.error(klx::Phases::PHASE_ENCODING, src, klx::STR_ENCODING);
 
+		KLX_LOG(klx::LOG_LEVEL_4, "read");
 		klx::stack_deserialise(ctx);
 
 		klx::IR& ir = ctx.instructions;
 
+		KLX_LOG(klx::LOG_LEVEL_2, "function inlining");
 		klx::opt_function_inlining(ir);
+
+		KLX_LOG(klx::LOG_LEVEL_2, "dead code elimination");
 		klx::opt_dead_code_elimination(ir);
+
+		KLX_LOG(klx::LOG_LEVEL_2, "constant folding");
 		klx::opt_const_fold(ir);
 
+		KLX_LOG(klx::LOG_LEVEL_2, "indirect branch elimination");
+		klx::opt_indirect_branch_elimination(ir);
+
+		KLX_LOG(klx::LOG_LEVEL_4, "emit");
 		klx::stack_serialise(ir);
 	}
 
