@@ -53,8 +53,6 @@ template <typename... Ts>
 	X(STACK_TKN_MOVE,       move) \
 	X(STACK_TKN_REMOVE,     remove) \
 	X(STACK_TKN_PUSH,       push) \
-	X(STACK_TKN_ARG,        arg) \
-	X(STACK_TKN_OUT,        out) \
 	X(STACK_TKN_CALL,       call) \
 	X(STACK_TKN_JUMP,       jump) \
 	X(STACK_TKN_BRANCH,     branch) \
@@ -238,8 +236,6 @@ struct StackLexer {
 			else if (view == "remove"_sv) kind = Tokens::STACK_TKN_REMOVE;
 			else if (view == "move"_sv)   kind = Tokens::STACK_TKN_MOVE;
 			else if (view == "push"_sv)   kind = Tokens::STACK_TKN_PUSH;
-			else if (view == "arg"_sv)    kind = Tokens::STACK_TKN_ARG;
-			else if (view == "out"_sv)    kind = Tokens::STACK_TKN_OUT;
 			else if (view == "call"_sv)   kind = Tokens::STACK_TKN_CALL;
 			else if (view == "jump"_sv)   kind = Tokens::STACK_TKN_JUMP;
 			else if (view == "branch"_sv) kind = Tokens::STACK_TKN_BRANCH;
@@ -273,8 +269,6 @@ inline std::ostream& operator<<(std::ostream& os, StackEffect se) {
 	X(OP_NONE, none) \
 	\
 	X(OP_PUSH,   push) \
-	X(OP_ARG,    arg) \
-	X(OP_OUT,    out) \
 	X(OP_COPY,   copy) \
 	X(OP_MOVE,   move) \
 	X(OP_REMOVE, remove) \
@@ -446,15 +440,12 @@ constexpr auto stack_is_instruction = partial_eq_any(
 	Tokens::STACK_TKN_REMOVE,
 	Tokens::STACK_TKN_MOVE,
 	Tokens::STACK_TKN_PUSH,
-	Tokens::STACK_TKN_ARG,
-	Tokens::STACK_TKN_OUT,
 	Tokens::STACK_TKN_CALL,
 	Tokens::STACK_TKN_JUMP,
 	Tokens::STACK_TKN_BRANCH,
 	Tokens::STACK_TKN_RET,
 	Tokens::STACK_TKN_END
 );
-
 
 // Stack IR parsing
 void stack_parse_def(StackContext&);
@@ -509,8 +500,6 @@ inline void stack_parse_identifier(StackContext& ctx) {
 		case Tokens::STACK_TKN_REMOVE:
 		case Tokens::STACK_TKN_MOVE:
 		case Tokens::STACK_TKN_PUSH:
-		case Tokens::STACK_TKN_ARG:
-		case Tokens::STACK_TKN_OUT:
 		case Tokens::STACK_TKN_JUMP: {
 			ctx.expect_token(equal(Tokens::STACK_TKN_INTEGER), ctx.peek().view, STR_INT);
 			size_t val = to_int(ctx.next().view);
@@ -520,11 +509,9 @@ inline void stack_parse_identifier(StackContext& ctx) {
 			switch (tok.kind) {
 				case Tokens::STACK_TKN_COPY:   op = Ops::OP_COPY;   break;
 				case Tokens::STACK_TKN_REMOVE: op = Ops::OP_REMOVE; break;
-				case Tokens::STACK_TKN_MOVE:   op = Ops::OP_MOVE;  break;
-				case Tokens::STACK_TKN_PUSH:   op = Ops::OP_PUSH; break;
-				case Tokens::STACK_TKN_ARG:    op = Ops::OP_ARG;  break;
-				case Tokens::STACK_TKN_OUT:    op = Ops::OP_OUT;  break;
-				case Tokens::STACK_TKN_JUMP:   op = Ops::OP_JUMP; break;
+				case Tokens::STACK_TKN_MOVE:   op = Ops::OP_MOVE;   break;
+				case Tokens::STACK_TKN_PUSH:   op = Ops::OP_PUSH;   break;
+				case Tokens::STACK_TKN_JUMP:   op = Ops::OP_JUMP;   break;
 
 				default:
 					op = Ops::OP_NONE;
@@ -623,28 +610,28 @@ inline void parse_call(Context& ctx) {
 	// Not an intrinsic.
 	ctx.instruction(Ops::OP_CALL, name);
 
-	if (auto it = ctx.effects.find(name); it == ctx.effects.end()) {
+	auto it = ctx.effects.find(name);
+
+	if (it == ctx.effects.end())
 		ctx.error(Phases::PHASE_SEMANTIC, name, STR_UNDECLARED, name);
-	}
 
-	else {
-		auto [in, out] = it->second;
+	auto [in, out] = it->second;
 
-		ctx.expect_effect(more_equal(in), name, STR_EFFECT, in, ctx.stack);
+	ctx.expect_effect(more_equal(in), name, STR_EFFECT, in, ctx.stack);
 
-		ctx.stack -= in;
-		ctx.stack += out;
-
-		for (size_t i = 0; i != out; ++i)
-			ctx.instruction(Ops::OP_OUT, ctx.out());
-	}
+	ctx.stack -= in;
+	ctx.stack += out;
 }
 
 inline void parse_while(Context& ctx) {
 	View pos = ctx.next().view;  // skip `while`
 
-	size_t id = ctx.block();
-	ctx.instruction(Ops::OP_BLOCK, id);
+	size_t header_id = ctx.block();
+	size_t body_id = ctx.block();
+
+	ctx.instruction(Ops::OP_JUMP, header_id);
+	ctx.instruction(Ops::OP_END);
+	ctx.instruction(Ops::OP_BLOCK, header_id);
 
 	// Expression.
 	ctx.expect_token(is_expr, ctx.peek().view, STR_EXPR);
@@ -654,17 +641,20 @@ inline void parse_while(Context& ctx) {
 	ctx.expect_effect(more_equal(1u), ctx.peek().view, STR_EFFECT, 1u, ctx.stack);
 	ctx.stack--;
 
-	ctx.instruction(Ops::OP_BRANCH, id, ctx.block_id);
+	ctx.instruction(Ops::OP_BRANCH, body_id, ctx.block_id);
+	ctx.instruction(Ops::OP_END);
 	size_t stack_before = ctx.stack;
 
 	// Body.
+	ctx.instruction(Ops::OP_BLOCK, body_id);
 	ctx.expect_token(is_expr, ctx.peek().view, STR_EXPR);
 	parse_expression(ctx);
 
 	// Check is stack size has been altered.
 	ctx.expect_effect(equal(stack_before), pos, STR_EFFECT_ALTERED, stack_before, ctx.stack);
 
-	ctx.instruction(Ops::OP_JUMP, id);
+	ctx.instruction(Ops::OP_JUMP, header_id);
+	ctx.instruction(Ops::OP_END);
 	ctx.instruction(Ops::OP_BLOCK, ctx.block());
 }
 
@@ -687,7 +677,6 @@ inline void parse_if(Context& ctx) {
 	// the else branch or the end of the branch entirely.
 	ctx.instruction(Ops::OP_BRANCH, start_block, else_block);
 	ctx.instruction(Ops::OP_END);
-
 	ctx.instruction(Ops::OP_BLOCK, start_block);
 
 	// Store the state of the stack before the body of the branch.
@@ -727,6 +716,7 @@ inline void parse_if(Context& ctx) {
 	else {
 		// Create end of branch block.
 		ctx.instruction(Ops::OP_JUMP, else_block);
+		ctx.instruction(Ops::OP_END);
 		ctx.instruction(Ops::OP_BLOCK, else_block);
 
 		// Expect that the stack size has not been altered.
@@ -823,9 +813,6 @@ inline void parse_def(Context& ctx) {
 	ctx.instruction(Ops::OP_DEF, name);
 	ctx.instruction(Ops::OP_BLOCK, ctx.block());
 
-	for (size_t i = 0; i < in; ++i)
-		ctx.instruction(Ops::OP_ARG, i);
-
 	ctx.expect_token(is_expr, ctx.peek().view, STR_EXPR);
 	parse_expression(ctx);
 
@@ -864,8 +851,6 @@ inline std::ostream& operator<<(std::ostream& os, klx::Op instr) {
 	switch (instr.kind) {
 		case Ops::OP_NONE:
 		case Ops::OP_PUSH:
-		case Ops::OP_ARG:
-		case Ops::OP_OUT:
 		case Ops::OP_COPY:
 		case Ops::OP_MOVE:
 		case Ops::OP_REMOVE:
