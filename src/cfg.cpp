@@ -30,12 +30,12 @@ namespace klx {
 
 				for (; it->kind != Ops::OP_END; ++it) {
 					if (it->kind == Ops::OP_JUMP) {
-						outlnfmt(ss, "    n{} -> n{}", block->x, it->x);
+						outlnfmt(ss, "    n{}:s -> n{}:n", block->x, it->x);
 					}
 
 					else if (it->kind == Ops::OP_BRANCH) {
-						outlnfmt(ss, "    n{}:w -> n{} [label=\"true\" color=\"#0d00ff\"]", block->x, it->x);
-						outlnfmt(ss, "    n{}:e -> n{} [label=\"false\" color=\"#ff8400\"]", block->x, it->y);
+						outlnfmt(ss, "    n{}:w -> n{}:n [label=\"true\" color=\"#0d00ff\"]", block->x, it->x);
+						outlnfmt(ss, "    n{}:e -> n{}:n [label=\"false\" color=\"#ff8400\"]", block->x, it->y);
 					}
 
 					else if (it->kind == Ops::OP_CALL) {

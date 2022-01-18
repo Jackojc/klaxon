@@ -65,7 +65,10 @@ void opt_function_inlining(IR& ir) {
 
 		// Remove any calls that aren't common to both `candidates` and `calls`.
 		calls.erase(std::remove_if(calls.begin(), calls.end(), [&] (auto&& x) {
-			return candidates.find(ir[x].sv) == candidates.end();
+			bool is_called = candidates.find(ir[x].sv) != candidates.end();
+			// bool is_called_once = std::count(calls.begin(), calls.end(), x) == 1;
+
+			return not is_called;
 		}), calls.end());
 
 		if (calls.empty() or candidates.empty())
