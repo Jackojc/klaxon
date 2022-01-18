@@ -9,7 +9,7 @@ def ::= 'def' <identifier> <block>+ 'ret'
 block ::= 'block' <int> <instruction>+ 'end'
 
 instruction ::=
-	( 'at' | 'drop' | 'rot' | 'push' | 'arg' | 'out' | 'jump' ) <int> |
+	( 'at' | 'drop' | 'rot' | 'push' | 'jump' ) <int> |
 	'branch' <int> <int> |
 	'call' <identifier>
 

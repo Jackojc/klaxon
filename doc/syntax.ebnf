@@ -47,14 +47,14 @@ block ::= '{' <expression>+ '}'
 
 // INSTRINSICS
 ops ::= (
-		'+' | '-' | '*' | '/' | '%' | '<<' | '>>' |
-		'<' | '>' | '=' |
+		'add' | 'sub' | 'mul' | 'div' | 'mod' | 'lsh' | 'rsh' |
+		'lt' | 'gt' | 'eq' |
 		'and' | 'or' | 'not' | 'xor' |
-		'&' | '|' | '~' | '^' |
+		'band' | 'bor' | 'bnot' | 'bxor' |
 		'word'
 	)
 
 // at @3
 intrinsic ::= <ops> | <arg_intrinsic>
-arg_intrinsic ::= ( 'at' | 'rot' | 'drop' ) <literal>
+arg_intrinsic ::= ( 'cp' | 'mv' | 'rm' ) <literal>
 
