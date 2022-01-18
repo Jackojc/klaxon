@@ -17,7 +17,7 @@ struct Def {
 		begin(begin_), end(end_) {}
 };
 
-inline decltype(auto) gather_candidates(IR& ir) {
+inline decltype(auto) gather_definitions(IR& ir) {
 	std::unordered_map<View, Def> defs = {
 		{ "main"_sv, { 0, 0 } },
 	};
@@ -34,10 +34,6 @@ inline decltype(auto) gather_candidates(IR& ir) {
 
 		size_t begin = std::distance(ir.begin(), def);
 		size_t end = std::distance(ir.begin(), it);
-		size_t length = std::distance(def, it);
-
-		if (length > INLINE_LIMIT)
-			continue;
 
 		defs.try_emplace(def->sv, begin, end);
 	}
@@ -60,18 +56,34 @@ inline decltype(auto) gather_calls(IR& ir) {
 
 void opt_function_inlining(IR& ir) {
 	while (true) {
-		auto candidates = gather_candidates(ir);
+		auto defs = gather_definitions(ir);
 		auto calls = gather_calls(ir);
 
-		// Remove any calls that aren't common to both `candidates` and `calls`.
+		// Remove any candidate calls that aren't common to both `defs` and `calls`.
 		calls.erase(std::remove_if(calls.begin(), calls.end(), [&] (auto&& x) {
-			bool is_called = candidates.find(ir[x].sv) != candidates.end();
-			// bool is_called_once = std::count(calls.begin(), calls.end(), x) == 1;
+			auto def_it = defs.find(ir[x].sv);
 
-			return not is_called;
+			// Check if definition is known.
+			if (def_it == defs.end())
+				return true; // Definition must be external, remove this candidate.
+
+			// Check if function called once.
+			size_t n_calls = std::count(calls.begin(), calls.end(), x);
+
+			if (n_calls == 1)
+				return false; // Function is called once so we lose nothing by inlining.
+
+			// Check if function is above inline limit.
+			auto [begin, end] = def_it->second;
+			size_t def_length = end - begin;
+
+			if (def_length > INLINE_LIMIT)
+				return true; // Remove function due to being too large.
+
+			return false;
 		}), calls.end());
 
-		if (calls.empty() or candidates.empty())
+		if (calls.empty() or defs.empty())
 			break;
 
 		// Move the noops just after every call.
@@ -80,7 +92,7 @@ void opt_function_inlining(IR& ir) {
 		for (size_t callsite: calls) {
 			auto it = ir.begin() + callsite + adjust;
 
-			auto [begin, end] = candidates.at(it->sv);
+			auto [begin, end] = defs.at(it->sv);
 
 			auto begin_it = ir.begin() + begin;
 			auto end_it = ir.begin() + end;
