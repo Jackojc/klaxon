@@ -626,12 +626,13 @@ inline void parse_call(Context& ctx) {
 inline void parse_while(Context& ctx) {
 	View pos = ctx.next().view;  // skip `while`
 
-	size_t header_id = ctx.block();
-	size_t body_id = ctx.block();
+	size_t header_block = ctx.block();
+	size_t body_block = ctx.block();
+	size_t end_block = ctx.block();
 
-	ctx.instruction(Ops::OP_JUMP, header_id);
+	ctx.instruction(Ops::OP_JUMP, header_block);
 	ctx.instruction(Ops::OP_END);
-	ctx.instruction(Ops::OP_BLOCK, header_id);
+	ctx.instruction(Ops::OP_BLOCK, header_block);
 
 	// Expression.
 	ctx.expect_token(is_expr, ctx.peek().view, STR_EXPR);
@@ -641,21 +642,21 @@ inline void parse_while(Context& ctx) {
 	ctx.expect_effect(more_equal(1u), ctx.peek().view, STR_EFFECT, 1u, ctx.stack);
 	ctx.stack--;
 
-	ctx.instruction(Ops::OP_BRANCH, body_id, ctx.block_id);
+	ctx.instruction(Ops::OP_BRANCH, body_block, end_block);
 	ctx.instruction(Ops::OP_END);
 	size_t stack_before = ctx.stack;
 
 	// Body.
-	ctx.instruction(Ops::OP_BLOCK, body_id);
+	ctx.instruction(Ops::OP_BLOCK, body_block);
 	ctx.expect_token(is_expr, ctx.peek().view, STR_EXPR);
 	parse_expression(ctx);
 
 	// Check is stack size has been altered.
 	ctx.expect_effect(equal(stack_before), pos, STR_EFFECT_ALTERED, stack_before, ctx.stack);
 
-	ctx.instruction(Ops::OP_JUMP, header_id);
+	ctx.instruction(Ops::OP_JUMP, header_block);
 	ctx.instruction(Ops::OP_END);
-	ctx.instruction(Ops::OP_BLOCK, ctx.block());
+	ctx.instruction(Ops::OP_BLOCK, end_block);
 }
 
 inline void parse_if(Context& ctx) {
