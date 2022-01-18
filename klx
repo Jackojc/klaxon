@@ -3,9 +3,22 @@
 artifacts="build"
 file="a.out"
 
-# set -xe
-cat $@ | m4 -P | ./build/klx | ./build/opt > "$artifacts/$file.kir"
-# cat $@ | m4 -P | ./build/klx > "$artifacts/$file.kir"
+set -xe
+
+# preprocess
+cat $@ | m4 -P                             > "$artifacts/$file.pre"
+
+# compile and optimise
+./build/klx < "$artifacts/$file.pre"       > "$artifacts/$file.unop.kir"
+./build/opt < "$artifacts/$file.unop.kir"  > "$artifacts/$file.kir"
+
+# control flow graphs
+./build/cfg < "$artifacts/$file.unop.kir"  > "$artifacts/$file.unop.dot"
+./build/cfg < "$artifacts/$file.kir"       > "$artifacts/$file.dot"
+
+# generate control flow graphs
+dot -Tpng     "$artifacts/$file.unop.dot" -o "$artifacts/$file.unop.png"
+dot -Tpng     "$artifacts/$file.dot"      -o "$artifacts/$file.png"
 
 # nasm -felf64 -o "$artifacts/$file.o" "$file.asm"
 # ld.lld -s -n --gc-sections --lto-O3 -O3 -o "$artifacts/$file" "$artifacts/$file.o"
