@@ -114,6 +114,11 @@ decl % ( a b -> q )
 decl << ( a b -> q )
 decl >> ( a b -> q )
 
+decl && ( a b -> q )
+decl || ( a b -> q )
+decl ^^ ( a b -> q )
+decl ! ( a -> a )
+
 decl & ( a b -> q )
 decl | ( a b -> q )
 decl ^ ( a b -> q )
@@ -127,6 +132,11 @@ def % mod
 
 def << lsh
 def >> rsh
+
+def && and
+def || or
+def ^^ xor
+def ! not
 
 def & band
 def | bor
@@ -142,12 +152,14 @@ decl lte ( a b -> q )
 decl gte ( a b -> q )
 
 decl = ( a b -> q )
+decl != ( a b -> q )
 decl < ( a b -> q )
 decl > ( a b -> q )
 decl <= ( a b -> q )
 decl >= ( a b -> q )
 
 def = eq
+def != { eq not }
 def < lt
 def > gt
 def <= lte
@@ -192,8 +204,8 @@ decl <0 ( a -> a )
 decl >=0 ( a -> a )
 decl <=0 ( a -> a )
 
-def =0 { 0 eq not }
-def !=0 { 0 eq }
+def =0 { 0 eq }
+def !=0 { 0 eq not }
 def >0 { 0 gt }
 def <0 { 0 lt }
 def >=0 { 0 gte }
