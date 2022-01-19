@@ -4,7 +4,7 @@
 
 include config.mk
 
-all: options compiler optimiser cfg
+all: options build
 
 config:
 	@mkdir -p $(BUILD_DIR)
@@ -15,20 +15,12 @@ options:
 	@printf "san \033[32m$(san)\033[0m | "
 	@printf "cflags \033[32m-std=$(CXXSTD) $(CXXFLAGS)\033[0m\n"
 
-compiler: config src/main.cpp
-	@printf "cc main.cpp\n"
-	@$(CXX) -std=$(CXXSTD) $(CXXWARN) $(CXXFLAGS) $(LDFLAGS) $(CPPFLAGS) $(INC) \
-		$(LIBS) -o $(BUILD_DIR)/$(TARGET_KLX) $(SRC_KLX)
+build: $(SRCS)
 
-optimiser: config src/opt.cpp
-	@printf "cc opt.cpp\n"
+$(SRCS): options config
+	@printf "tgt \033[32m$@\033[0m\n"
 	@$(CXX) -std=$(CXXSTD) $(CXXWARN) $(CXXFLAGS) $(LDFLAGS) $(CPPFLAGS) $(INC) \
-		$(LIBS) -o $(BUILD_DIR)/$(TARGET_OPT) $(SRC_OPT)
-
-cfg: config src/cfg.cpp
-	@printf "cc cfg.cpp\n"
-	@$(CXX) -std=$(CXXSTD) $(CXXWARN) $(CXXFLAGS) $(LDFLAGS) $(CPPFLAGS) $(INC) \
-		$(LIBS) -o $(BUILD_DIR)/$(TARGET_CFG) $(SRC_CFG)
+		$(LIBS) -o $@ $(SRC_DIR)/$(basename $(notdir $@)).cpp
 
 clean:
 	rm -rf $(BUILD_DIR)/ *.gcda
