@@ -9,8 +9,7 @@ provide-module -override klx %{
 	add-highlighter shared/klx/comment/ fill comment
 
 	# literals
-	add-highlighter shared/klx/other/ regex %{\b([_0-9]+|0x[_0-9a-fA-F]+|0b[_01]+)} 0:value
-	add-highlighter shared/klx/other/ regex %{@\b([_0-9]+|0x[_0-9a-fA-F]+|0b[_01]+)} 0:value
+	add-highlighter shared/klx/other/ regex "^|\s\K(\d+)\s|$" 0:value
 
 	# keywords and operators
 	add-highlighter shared/klx/other/ regex "\b(mv|cp|rm|while|if|else|def|decl)\b" 0:keyword
