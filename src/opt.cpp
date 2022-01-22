@@ -3,12 +3,13 @@
 #include <lib.hpp>
 
 namespace klx {
+	// Constants
+	constexpr size_t INLINE_LIMIT = 15;
+}
 
-// Constants
-constexpr size_t INLINE_LIMIT = 15;
 
+namespace klx {
 
-// Function inlining.
 struct Def {
 	size_t begin = 0;
 	size_t end = 0;
@@ -17,6 +18,75 @@ struct Def {
 		begin(begin_), end(end_) {}
 };
 
+// Store information about the source.
+// struct StaticAnalysis {
+// 	size_t block_id = 0;
+// 	std::array<std::vector<size_t>, (size_t)Ops::OP_TOTAL> instructions;
+// 	std::unordered_map<View, std::vector<View>> call_graph;
+// };
+
+// inline StaticAnalysis analyse(IR& ir) {
+// 	StaticAnalysis sa;
+
+// 	for (auto it = ir.begin(); it != ir.end(); ++it) {
+// 		sa[(size_t)it->kind].emplace_back(std::distance(ir.begin(), it));
+// 	}
+
+// 	return sa;
+// }
+// Call graph
+
+// Generate a callgraph to find which functions are called and by who.
+using CallGraph = std::unordered_map<View, std::vector<View>>;
+
+inline CallGraph generate_call_graph(IR& ir) {
+	CallGraph cg;
+
+	for (auto it = ir.begin(); it != ir.end(); ++it) {
+		if (it->kind != Ops::OP_DEF)
+			continue;
+
+		View def_sv = it->sv;
+		auto [def_it, succ] = cg.try_emplace(def_sv, std::vector<View>{});
+
+		// Function body.
+		for (; it->kind != Ops::OP_RET; ++it) {
+			if (it->kind != Ops::OP_CALL)
+				continue;
+
+			// Function call.
+			View call_sv = it->sv;
+			def_it->second.emplace_back(call_sv);
+		}
+	}
+
+	return cg;
+}
+
+// Prune any calls which don't have `main` as an ancestor.
+namespace detail {
+	inline void prune_call_graph(IR& ir, CallGraph& old_cg, CallGraph& cg, View old_sv, View sv) {
+		if (auto it = old_cg.find(sv); it != old_cg.end()) {
+			for (View call: it->second) {
+				if (old_sv == call)
+					break;
+
+				detail::prune_call_graph(ir, old_cg, cg, sv, call);
+			}
+
+			cg.insert(*it);
+		}
+	}
+}
+
+inline CallGraph prune_call_graph(IR& ir, CallGraph& old_cg, View sv) {
+	CallGraph cg;
+	detail::prune_call_graph(ir, old_cg, cg, ""_sv, sv);
+	return cg;
+}
+
+
+// Function inlining.
 inline decltype(auto) gather_definitions(IR& ir) {
 	std::unordered_map<View, Def> defs = {
 		{ "main"_sv, { 0, 0 } },
@@ -103,8 +173,7 @@ void opt_function_inlining(IR& ir) {
 			it->kind = Ops::OP_NONE;
 			++it;
 
-			begin_it++;  // Skip `def`
-
+			++begin_it;  // Skip `def`
 			++begin_it;  // Skip `block`
 			--end_it;    // Skip `end`
 
@@ -125,37 +194,12 @@ void opt_function_inlining(IR& ir) {
 }
 
 // Dead code elimination.
-inline void opt_dead_code_elimination(IR& ir) {
-	struct Def {
-		IR::iterator it {};
-		size_t calls = 0;
-
-		constexpr Def(IR::iterator it_, size_t calls_):
-			it(it_), calls(calls_) {}
-	};
-
-	std::unordered_map<View, Def> defs = {
-		{ "main"_sv, Def { ir.end(), 1 } }
-	};
-
-	// Record definition positions and number of calls.
+inline void opt_dead_code_elimination(IR& ir, CallGraph& cg) {
 	for (auto it = ir.begin(); it != ir.end(); ++it) {
-		if (it->kind == Ops::OP_DEF) {
-			if (auto [element, succ] = defs.try_emplace(it->sv, it, 0); not succ)
-				element->second.it = it;
-		}
+		if (it->kind != Ops::OP_DEF)
+			continue;
 
-		else if (it->kind == Ops::OP_CALL) {
-			if (auto [element, succ] = defs.try_emplace(it->sv, it, 1); not succ)
-				element->second.calls++;
-		}
-	}
-
-	// Overwrite unused definitions with noops.
-	for (auto& [sv, def]: defs) {
-		auto [it, calls] = def;
-
-		if (calls > 0)
+		if (cg.find(it->sv) != cg.end())
 			continue;
 
 		for (; it->kind != Ops::OP_RET; ++it)
@@ -291,24 +335,23 @@ int main(int argc, const char* argv[]) {
 		if (not klx::utf_validate(src))
 			ctx.error(klx::Phases::PHASE_ENCODING, src, klx::STR_ENCODING);
 
-		KLX_LOG(klx::LOG_LEVEL_4, "read");
 		klx::stack_deserialise(ctx);
 
-		klx::IR& ir = ctx.instructions;
 
-		KLX_LOG(klx::LOG_LEVEL_2, "function inlining");
-		klx::opt_function_inlining(ir);
+		klx::IR ir_a = std::move(ctx.instructions);
+		klx::IR ir_b;
 
-		KLX_LOG(klx::LOG_LEVEL_2, "dead code elimination");
-		klx::opt_dead_code_elimination(ir);
+		ir_b.reserve(ir_a.capacity());
 
-		KLX_LOG(klx::LOG_LEVEL_2, "constant folding");
-		klx::opt_const_fold(ir);
+		klx::opt_function_inlining(ir_a, ir_b);
 
-		KLX_LOG(klx::LOG_LEVEL_2, "indirect branch elimination");
-		klx::opt_indirect_branch_elimination(ir);
+		// auto cg = klx::generate_call_graph(ir);
+		// cg = klx::prune_call_graph(ir, cg, "main"_sv);
+		// klx::opt_dead_code_elimination(ir, cg);
 
-		KLX_LOG(klx::LOG_LEVEL_4, "emit");
+		// klx::opt_const_fold(ir);
+		// klx::opt_indirect_branch_elimination(ir);
+
 		klx::stack_serialise(ir);
 	}
 
