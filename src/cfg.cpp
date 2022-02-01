@@ -14,31 +14,34 @@ namespace klx {
 		outln(ss, "  edge [fontsize=10 fontname=\"Consolas\" arrowsize=0.5]");
 
 		for (auto it = ir.begin(); it != ir.end(); ++it) {
-			if (it->kind != Ops::OP_DEF)
+			if (it->kind != Symbols::DEF)
 				continue;
 
 			outlnfmt(ss, "  subgraph cluster_{} {", std::distance(ir.begin(), it));
-			outlnfmt(ss, "    label=\"{}\"", it->sv);
+			outlnfmt(ss, "    label=\"{} ({}->{})\"", it->sv, it->x, it->y);
+
+			auto def = it++;
 
 			// Iterate body of function.
-			for (++it; it->kind != Ops::OP_RET; ++it) {
-				if (it->kind != Ops::OP_BLOCK)
+			for (; it->kind != Symbols::RET; ++it) {
+				if (it->kind != Symbols::BLOCK)
 					continue;
 
 				std::ostringstream ss_block;
+
 				auto block = it++;
 
-				for (; it->kind != Ops::OP_END; ++it) {
-					if (it->kind == Ops::OP_JUMP) {
-						outlnfmt(ss, "    n{}:s -> n{}:n", block->x, it->x);
+				for (; it->kind != Symbols::END; ++it) {
+					if (it->kind == Symbols::JUMP) {
+						outlnfmt(ss, "    \"n_{}_{}\":s -> \"n_{}_{}\":n", def->sv, block->x, def->sv, it->x);
 					}
 
-					else if (it->kind == Ops::OP_BRANCH) {
-						outlnfmt(ss, "    n{}:w -> n{}:n [label=\"true\" color=\"#0d00ff\"]", block->x, it->x);
-						outlnfmt(ss, "    n{}:e -> n{}:n [label=\"false\" color=\"#ff8400\"]", block->x, it->y);
+					else if (it->kind == Symbols::BRANCH) {
+						outlnfmt(ss, "    \"n_{}_{}\":sw -> \"n_{}_{}\":n [label=\"true\" color=\"#0d00ff\"] [weight=10000]", def->sv, block->x, def->sv, it->x);
+						outlnfmt(ss, "    \"n_{}_{}\":se -> \"n_{}_{}\":n [label=\"false\" color=\"#ff8400\"] [weight=10000]", def->sv, block->x, def->sv, it->y);
 					}
 
-					else if (it->kind == Ops::OP_CALL) {
+					else if (it->kind == Symbols::CALL) {
 						auto [begin, end] = it->sv;
 
 						std::string str;
@@ -58,7 +61,7 @@ namespace klx {
 							str += *begin;
 						}
 
-						out(ss_block, "call ", str, "\\l");
+						outfmt(ss_block, "call {} ({}-\\>{})\\l", str, it->x, it->y);
 						continue;
 					}
 
@@ -67,8 +70,8 @@ namespace klx {
 
 				std::string code = ss_block.str();
 
-				if (code.empty()) outlnfmt(ss, "    n{} [label=\"{{block {}}}\"]", block->x, block->x);
-				else              outlnfmt(ss, "    n{} [label=\"{{block {}|{}}}\"]", block->x, block->x, code);
+				if (code.empty()) outlnfmt(ss, "    \"n_{}_{}\" [label=\"{{block {} ({}-\\>{})}}\"] [weight=10]", def->sv, block->x, block->x, block->y, block->z);
+				else              outlnfmt(ss, "    \"n_{}_{}\" [label=\"{{block {} ({}-\\>{})|{}}}\"] [weight=10]", def->sv, block->x, block->x, block->y, block->z, code);
 			}
 
 			outln(ss, "  }");
@@ -91,7 +94,7 @@ int main(int argc, const char* argv[]) {
 		if (not klx::utf_validate(src))
 			ctx.error(klx::Phases::PHASE_ENCODING, src, klx::STR_ENCODING);
 
-		klx::stack_deserialise(ctx);
+		klx::ir_parse(ctx);
 		klx::IR& ir = ctx.instructions;
 
 		klx::control_flow_graph(ir);
