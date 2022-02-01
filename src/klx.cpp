@@ -13,8 +13,8 @@ int main(int argc, const char* argv[]) {
 		if (not klx::utf_validate(src))
 			ctx.error(klx::Phases::PHASE_ENCODING, src, klx::STR_ENCODING);
 
-		klx::parse_program(ctx);
-		klx::stack_serialise(ctx.instructions);
+		klx::src_parse(ctx);
+		klx::serialise(ctx.instructions);
 	}
 
 	catch (klx::Error) {
