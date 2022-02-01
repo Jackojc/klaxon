@@ -28,66 +28,76 @@ template <typename... Ts>
 }
 
 
-#define SYMBOL_TYPES \
-	X(NONE,       none) \
-	X(TERMINATOR, eof) \
-	\
-	X(BLOCK, block) \
-	X(DECL,  decl) \
-	X(DEF,   def) \
-	X(WHILE, while) \
-	X(IF,    if) \
-	X(ELSE,  else) \
-	X(ARROW, arrow) \
-	\
-	X(IDENTIFIER, identifier) \
-	X(INTEGER,    integer) \
-	\
-	X(LPAREN, lparen) \
-	X(RPAREN, rparen) \
-	X(LBRACE, lbrace) \
-	X(RBRACE, rbrace) \
-	\
-	X(COPY,   copy) \
-	X(MOVE,   move) \
-	X(REMOVE, remove) \
-	X(PUSH,   push) \
-	X(CALL,   call) \
-	X(JUMP,   jump) \
-	X(BRANCH, branch) \
-	X(RET,    ret) \
-	X(END,    end)
+enum class TokenTypes {
+	SRC,
+	IR,
+	BOTH,
+};
 
-	#define X(name, str) name,
+#define SYMBOL_TYPES \
+	X(NONE,       "no-op", TokenTypes::BOTH) \
+	X(TERMINATOR, "eof",   TokenTypes::BOTH) \
+	\
+	X(DEF,   "def",   TokenTypes::BOTH) \
+	X(DECL,  "decl",  TokenTypes::SRC) \
+	X(WHILE, "while", TokenTypes::SRC) \
+	X(IF,    "if",    TokenTypes::SRC) \
+	X(ELSE,  "else",  TokenTypes::SRC) \
+	X(BLOCK, "block", TokenTypes::IR) \
+	\
+	X(IDENTIFIER, "identifier", TokenTypes::BOTH) \
+	X(INTEGER,    "integer",    TokenTypes::BOTH) \
+	\
+	X(ARROW,  "->", TokenTypes::BOTH) \
+	X(LPAREN, "(",  TokenTypes::BOTH) \
+	X(RPAREN, ")",  TokenTypes::BOTH) \
+	X(LBRACE, "{",  TokenTypes::SRC) \
+	X(RBRACE, "}",  TokenTypes::SRC) \
+	\
+	X(COPY,   "copy",   TokenTypes::BOTH) \
+	X(MOVE,   "move",   TokenTypes::BOTH) \
+	X(REMOVE, "remove", TokenTypes::BOTH) \
+	X(PUSH,   "push",   TokenTypes::IR) \
+	X(CALL,   "call",   TokenTypes::IR) \
+	X(JUMP,   "jump",   TokenTypes::IR) \
+	X(BRANCH, "branch", TokenTypes::IR) \
+	X(RET,    "ret",    TokenTypes::IR) \
+	X(END,    "end",    TokenTypes::IR)
+
+	#define X(name, str, type) name,
 		enum class Symbols { SYMBOL_TYPES };
 	#undef X
 
-	#define X(name, str) #str##_sv,
-		constexpr klx::View SYMBOL_TO_STRING[] = { SYMBOL_TYPES };
+	#define X(name, str, type) str##_sv,
+		constexpr View SYMBOL_TO_STRING[] = { SYMBOL_TYPES };
 	#undef X
+
+	#define X(name, str, type) std::pair { str##_sv , std::pair { Symbols::name , type } },
+		inline std::unordered_map<View, std::pair<Symbols, TokenTypes>> STRING_TO_SYMBOL = { SYMBOL_TYPES };
+	#undef X
+
+	constexpr View symbol_to_string(Symbols sym) {
+		return SYMBOL_TO_STRING[(int)sym];
+	}
+
+	inline Symbols string_to_symbol(View sv) {
+		return STRING_TO_SYMBOL.at(sv).first;
+	}
+
 #undef SYMBOL_TYPES
 
 inline std::ostream& operator<<(std::ostream& os, Symbols k) {
-	return (os << SYMBOL_TO_STRING[(int)k]);
+	return (os << symbol_to_string(k));
 }
 
 
 struct Token {
-	klx::View view = ""_sv;
+	klx::View view = symbol_to_string(Symbols::NONE);
 	klx::Symbols kind = Symbols::NONE;
 };
 
-inline std::ostream& operator<<(std::ostream& os, Token t) {
-	return (os << '{' << t.kind << ", '" << t.view << "'}");
-}
 
-
-enum class LexerModes {
-	SOURCE,
-	INTERMEDIATE,
-};
-
-template <LexerModes MODE>
+template <TokenTypes MODE>
 struct Lexer {
 	klx::View original {};
 	klx::View src {};
@@ -148,34 +158,11 @@ struct Lexer {
 			kind = Symbols::IDENTIFIER;
 			view = klx::consume_char(src, c, klx::is_visible);
 
-			if constexpr(MODE == LexerModes::SOURCE) {
-				if      (view == "while"_sv) kind = Symbols::WHILE;
-				else if (view == "if"_sv)    kind = Symbols::IF;
-				else if (view == "def"_sv)   kind = Symbols::DEF;
-				else if (view == "else"_sv)  kind = Symbols::ELSE;
-				else if (view == "decl"_sv)  kind = Symbols::DECL;
-				else if (view == "{"_sv)     kind = Symbols::LBRACE;
-				else if (view == "}"_sv)     kind = Symbols::RBRACE;
-				else if (view == "("_sv)     kind = Symbols::LPAREN;
-				else if (view == ")"_sv)     kind = Symbols::RPAREN;
-				else if (view == "->"_sv)    kind = Symbols::ARROW;
-			}
+			if (auto it = STRING_TO_SYMBOL.find(view); it != STRING_TO_SYMBOL.end()) {
+				auto [sym, type] = it->second;
 
-			else if (MODE == LexerModes::INTERMEDIATE) {
-				if      (view == "def"_sv)    kind = Symbols::DEF;
-				else if (view == "block"_sv)  kind = Symbols::BLOCK;
-				else if (view == "copy"_sv)   kind = Symbols::COPY;
-				else if (view == "remove"_sv) kind = Symbols::REMOVE;
-				else if (view == "move"_sv)   kind = Symbols::MOVE;
-				else if (view == "push"_sv)   kind = Symbols::PUSH;
-				else if (view == "call"_sv)   kind = Symbols::CALL;
-				else if (view == "jump"_sv)   kind = Symbols::JUMP;
-				else if (view == "branch"_sv) kind = Symbols::BRANCH;
-				else if (view == "ret"_sv)    kind = Symbols::RET;
-				else if (view == "end"_sv)    kind = Symbols::END;
-				else if (view == "("_sv)      kind = Symbols::LPAREN;
-				else if (view == ")"_sv)      kind = Symbols::RPAREN;
-				else if (view == "->"_sv)     kind = Symbols::ARROW;
+				if (eq_any(type, MODE, TokenTypes::BOTH))
+					kind = sym;
 			}
 		}
 
@@ -190,18 +177,14 @@ struct Lexer {
 	}
 };
 
-using IntermediateLexer = Lexer<LexerModes::INTERMEDIATE>;
-using SourceLexer = Lexer<LexerModes::SOURCE>;
+using IntermediateLexer = Lexer<TokenTypes::IR>;
+using SourceLexer = Lexer<TokenTypes::SRC>;
 
 
 struct StackEffect {
 	size_t in = 0;
 	size_t out = 0;
 };
-
-inline std::ostream& operator<<(std::ostream& os, StackEffect se) {
-	return (os << "( " << se.in << " -> " << se.out << " )");
-}
 
 
 struct Op {
@@ -262,9 +245,9 @@ struct Context: SourceLexer {
 		Lexer::Lexer(src)
 	{
 		effects = {
-			{ "rm"_sv,   { 1, 0 } },
-			{ "copy"_sv, { 1, 1 } },
-			{ "move"_sv, { 1, 0 } },
+			{ symbol_to_string(Symbols::REMOVE), { 1, 0 } },
+			{ symbol_to_string(Symbols::COPY),   { 1, 1 } },
+			{ symbol_to_string(Symbols::MOVE),   { 1, 0 } },
 		};
 	}
 
@@ -340,7 +323,11 @@ constexpr auto is_stmt = partial_eq_any(Symbols::DEF, Symbols::DECL);
 constexpr auto is_keyw = partial_eq_any(
 	Symbols::WHILE,
 	Symbols::IF,
-	Symbols::DEF
+	Symbols::DEF,
+	Symbols::ELSE,
+	Symbols::DEF,
+	Symbols::DECL,
+	Symbols::ARROW
 );
 
 constexpr auto is_expr = partial_eq_any(
@@ -348,11 +335,16 @@ constexpr auto is_expr = partial_eq_any(
 	Symbols::IDENTIFIER,
 	Symbols::WHILE,
 	Symbols::IF,
-	Symbols::LBRACE
+	Symbols::LBRACE,
+	Symbols::COPY,
+	Symbols::MOVE,
+	Symbols::REMOVE
 );
 
 constexpr auto is_type_annotation = equal(Symbols::LPAREN);
 constexpr auto is_block = equal(Symbols::LBRACE);
+
+// Is a basic instruction (i.e. not block/def/end/ret)
 constexpr auto is_instruction = partial_eq_any(
 	Symbols::COPY,
 	Symbols::REMOVE,
@@ -369,7 +361,7 @@ constexpr auto is_instruction = partial_eq_any(
 inline StackEffect ir_parse_annotation (StackContext&);
 inline void        ir_parse_def        (StackContext&);
 inline void        ir_parse_block      (StackContext&);
-inline void        ir_parse_identifier (StackContext&);
+inline void        ir_parse_instruction (StackContext&);
 inline void        ir_parse            (StackContext&);
 
 
@@ -379,13 +371,13 @@ inline StackEffect ir_parse_annotation(StackContext& ctx) {
 	ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_INT);
 	size_t in = to_int(ctx.next().view);
 
-	ctx.expect_token(equal(Symbols::ARROW), ctx.peek().view, STR_EXPECT, "->"_sv);
+	ctx.expect_token(equal(Symbols::ARROW), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::ARROW));
 	ctx.next();
 
 	ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_INT);
 	size_t out = to_int(ctx.next().view);
 
-	ctx.expect_token(equal(Symbols::RPAREN), ctx.peek().view, STR_EXPECT, ")"_sv);
+	ctx.expect_token(equal(Symbols::RPAREN), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::RPAREN));
 	ctx.next();  // skip `)`
 
 	return { in, out };
@@ -393,8 +385,6 @@ inline StackEffect ir_parse_annotation(StackContext& ctx) {
 
 inline void ir_parse_def(StackContext& ctx) {
 	ctx.next();  // skip `def`
-
-	ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
 	View name = ctx.next().view;
 
 	ctx.expect_token(is_type_annotation, ctx.peek().view, STR_ANNOTATION);
@@ -407,7 +397,7 @@ inline void ir_parse_def(StackContext& ctx) {
 		ir_parse_block(ctx);
 	}
 
-	ctx.expect_token(equal(Symbols::RET), ctx.peek().view, STR_EXPECT, "ret"_sv);
+	ctx.expect_token(equal(Symbols::RET), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::RET));
 	ctx.next();  // skip `ret`
 
 	ctx.instruction(Symbols::RET);
@@ -426,16 +416,16 @@ inline void ir_parse_block(StackContext& ctx) {
 
 	while (eq_none(ctx.peek().kind, Symbols::END, Symbols::TERMINATOR)) {
 		ctx.expect_token(is_instruction, ctx.peek().view, STR_INSTRUCTION);
-		ir_parse_identifier(ctx);
+		ir_parse_instruction(ctx);
 	}
 
-	ctx.expect_token(equal(Symbols::END), ctx.peek().view, STR_EXPECT, "end"_sv);
+	ctx.expect_token(equal(Symbols::END), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::END));
 	ctx.next();  // skip `end`
 
 	ctx.instruction(Symbols::END);
 }
 
-inline void ir_parse_identifier(StackContext& ctx) {
+inline void ir_parse_instruction(StackContext& ctx) {
 	Token tok = ctx.next();  // skip identifier
 
 	switch (tok.kind) {
@@ -460,7 +450,6 @@ inline void ir_parse_identifier(StackContext& ctx) {
 		} break;
 
 		case Symbols::CALL: {
-			ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
 			View name = ctx.next().view;
 
 			ctx.expect_token(is_type_annotation, ctx.peek().view, STR_ANNOTATION);
@@ -492,13 +481,11 @@ inline void        src_parse_while      (Context&);
 inline void        src_parse_if         (Context&);
 inline void        src_parse_block      (Context&);
 inline void        src_parse_expression (Context&);
-
 inline StackEffect src_parse_annotation (Context&);
-
 inline void        src_parse_decl       (Context&);
 inline void        src_parse_def        (Context&);
 inline void        src_parse_statement  (Context&);
-inline void        src_parse        (Context&);
+inline void        src_parse            (Context&);
 
 
 // Expressions
@@ -509,32 +496,27 @@ inline void src_parse_literal(Context& ctx) {
 }
 
 inline void src_parse_call(Context& ctx) {
-	View name = ctx.next().view;
+	Token tok = ctx.next();
+	View name = tok.view;
 
 	// Argument intrinsics.
-	if (eq_any(name, "cp"_sv, "mv"_sv, "rm"_sv)) {
+	if (eq_any(tok.kind,
+		Symbols::COPY,
+		Symbols::MOVE,
+		Symbols::REMOVE
+	)) {
 		ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_ARG, name);
 
 		size_t arg = to_int(ctx.next().view);
-		Symbols kind = Symbols::NONE;
-
 		ctx.expect_effect(more_equal(arg + 1), name, STR_EFFECT, arg + 1, ctx.stack);
 
-		if (name == "mv"_sv)
-			kind = Symbols::MOVE;
-
-		else if (name == "cp"_sv) {
-			kind = Symbols::COPY;
+		if (tok.kind == Symbols::COPY)
 			ctx.stack++;
-		}
 
-		else if (name == "rm"_sv) {
-			kind = Symbols::REMOVE;
+		else if (tok.kind == Symbols::REMOVE)
 			ctx.stack--;
-		}
 
-		ctx.instruction(kind, arg);
-
+		ctx.instruction(tok.kind, arg);
 		return;
 	}
 
@@ -662,14 +644,19 @@ inline void src_parse_block(Context& ctx) {
 	while (eq_none(ctx.peek().kind, Symbols::RBRACE, Symbols::TERMINATOR))
 		src_parse_expression(ctx);
 
-	ctx.expect_token(equal(Symbols::RBRACE), ctx.peek().view, STR_EXPECT, "}"_sv);
+	ctx.expect_token(equal(Symbols::RBRACE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::RBRACE));
 	ctx.next();  // skip `}`
 }
 
 inline void src_parse_expression(Context& ctx) {
 	switch (ctx.peek().kind) {
+		case Symbols::IDENTIFIER:
+		case Symbols::COPY:
+		case Symbols::MOVE:
+		case Symbols::REMOVE:
+			return src_parse_call(ctx);
+
 		case Symbols::INTEGER:    return src_parse_literal(ctx);
-		case Symbols::IDENTIFIER: return src_parse_call(ctx);
 		case Symbols::WHILE:      return src_parse_while(ctx);
 		case Symbols::IF:         return src_parse_if(ctx);
 		case Symbols::LBRACE:     return src_parse_block(ctx);
@@ -704,7 +691,7 @@ inline StackEffect src_parse_annotation(Context& ctx) {
 		(*ptr)++;
 	}
 
-	ctx.expect_token(equal(Symbols::RPAREN), ctx.peek().view, STR_EXPECT, ")"_sv);
+	ctx.expect_token(equal(Symbols::RPAREN), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::RPAREN));
 	ctx.next();  // skip `)`
 
 	return { in, out };
