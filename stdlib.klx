@@ -1,88 +1,88 @@
 decl main ( -> ret )
 
 decl dup ( a -> a a )
-def dup cp 0
+def dup copy 0
 
 decl dup2 ( a b -> a b a b )
 def dup2 {
-	cp 1
-	cp 1
+	copy 1
+	copy 1
 }
 
 decl over ( a b -> a b a )
-def over cp 1
+def over copy 1
 
 decl over2 ( a b c d -> a b c d a b )
 def over2 {
-	cp 3
-	cp 3
+	copy 3
+	copy 3
 }
 
 decl swap ( a b -> b a )
-def swap mv 1
+def swap move 1
 
 decl swap2 ( a b c d -> c d a b )
 def swap2 {
-	cp 3
-	cp 3
-	rm 4
-	rm 4
+	copy 3
+	copy 3
+	remove 4
+	remove 4
 }
 
 decl drop ( a -> )
-def drop rm 0
+def drop remove 0
 
 decl drop2 ( a b -> )
 def drop2 {
-	rm 0
-	rm 0
+	remove 0
+	remove 0
 }
 
 decl rotl ( a b c -> b c a )
 def rotl {
-	mv 2
+	move 2
 }
 
 decl rotl2 ( a b c d e f -> c d e f a b )
 def rotl2 {
-	mv 5
-	mv 5
+	move 5
+	move 5
 }
 
 decl rotr ( a b c -> c a b )
 def rotr {
-	mv 2
-	mv 2
+	move 2
+	move 2
 }
 
 decl rotr2 ( a b c d e f -> e f a b c d )
 def rotr2 {
-	mv 5
-	mv 5
-	mv 5
-	mv 5
+	move 5
+	move 5
+	move 5
+	move 5
 }
 
 decl nip ( a b -> b )
-def nip rm 1
+def nip remove 1
 
 decl nip2 ( a b c -> c )
 def nip2 {
-	rm 1
-	rm 1
+	remove 1
+	remove 1
 }
 
 decl tuck ( a b -> b a b )
 def tuck {
 	over
 	over
-	rm 3
+	remove 3
 }
 
 decl tuck2 ( a b c d -> c d a b c d )
 def tuck2 {
-	mv 3
-	mv 3
+	move 3
+	move 3
 	over2
 }
 
@@ -191,11 +191,11 @@ decl false ( -> a )
 def true 1
 def false 0
 
-decl =true ( a -> a )
-decl =false ( a -> a )
+decl true? ( a -> a )
+decl false? ( a -> a )
 
-def =true { true eq }
-def =false { false eq }
+def true? { true eq }
+def false? { false eq }
 
 decl =0 ( a -> a )
 decl !=0 ( a -> a )
@@ -217,28 +217,39 @@ decl -? ( a -> a )
 def +? >0
 def -? <0
 
-decl both ( a b -> q )
-decl neither ( a b -> q )
-decl either ( a b -> q )
+decl even? ( a -> a )
+decl odd? ( a -> a )
 
-def both {
-	=true
+def even? {
+	2 % =0
+}
+
+def odd? {
+	2 % 1 =
+}
+
+decl both? ( a b -> q )
+decl neither? ( a b -> q )
+decl either? ( a b -> q )
+
+def both? {
+	true?
 	swap
-	=true
+	true?
 	eq
 }
 
-def neither {
-	=false
+def neither? {
+	false?
 	swap
-	=false
+	false?
 	eq
 }
 
-def either {
-	=true
+def either? {
+	true?
 	swap
-	=true
+	true?
 	or
 }
 
