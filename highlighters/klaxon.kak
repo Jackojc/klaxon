@@ -12,7 +12,7 @@ provide-module -override klx %{
 	add-highlighter shared/klx/other/ regex "^|\s\K(\d+)\s|$" 0:value
 
 	# keywords and operators
-	add-highlighter shared/klx/other/ regex "\b(mv|cp|rm|while|if|else|def|decl)\b" 0:keyword
+	add-highlighter shared/klx/other/ regex "\b(move|copy|remove|while|if|else|def|decl)\b" 0:keyword
 
 	# string
 	add-highlighter shared/klx/string region '"' (?<!\\)(\\\\)*" group
