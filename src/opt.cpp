@@ -1,325 +1,143 @@
 #include <iostream>
+#include <type_traits>
 #include <string>
 #include <lib.hpp>
 
 namespace klx {
-	// Constants
-	constexpr size_t INLINE_LIMIT = 15;
+	constexpr size_t INLINE_LIMIT = 20;
 }
 
 
 namespace klx {
 
+// Inlining.
 struct Def {
-	size_t begin = 0;
-	size_t end = 0;
+	IR::const_iterator begin;
+	IR::const_iterator end;
+	size_t max_block;
 
-	constexpr Def(size_t begin_ = 0, size_t end_ = 0):
-		begin(begin_), end(end_) {}
+	Def(IR::const_iterator begin_, IR::const_iterator end_, size_t max_block_):
+		begin(begin_), end(end_), max_block(max_block_) {}
 };
 
-// Store information about the source.
-// struct StaticAnalysis {
-// 	size_t block_id = 0;
-// 	std::array<std::vector<size_t>, (size_t)Ops::OP_TOTAL> instructions;
-// 	std::unordered_map<View, std::vector<View>> call_graph;
-// };
+using Defs = std::unordered_map<View, Def>;
 
-// inline StaticAnalysis analyse(IR& ir) {
-// 	StaticAnalysis sa;
+inline void perform_inline(IR& new_ir, Defs::iterator it) {
+	auto [begin, end, max_block] = it->second;
 
-// 	for (auto it = ir.begin(); it != ir.end(); ++it) {
-// 		sa[(size_t)it->kind].emplace_back(std::distance(ir.begin(), it));
-// 	}
+	begin++; // Skip function header.
+	begin++;
+	end--;   // Skip function footer.
 
-// 	return sa;
-// }
-// Call graph
+	auto inlined_begin = new_ir.insert(new_ir.end(), begin, end);
+	auto inlined_end = inlined_begin + std::distance(begin, end);
 
-// Generate a callgraph to find which functions are called and by who.
-using CallGraph = std::unordered_map<View, std::vector<View>>;
+	size_t new_max_block = 0;
 
-inline CallGraph generate_call_graph(IR& ir) {
-	CallGraph cg;
+	// Re-number any inlined blocks so we don't get conflicts.
+	for (; inlined_begin != inlined_end; ++inlined_begin) {
+		if (inlined_begin->kind == Symbols::BLOCK) {
+			inlined_begin->x += max_block;
+			new_max_block = inlined_begin->x;
+		}
 
-	for (auto it = ir.begin(); it != ir.end(); ++it) {
-		if (it->kind != Ops::OP_DEF)
-			continue;
+		else if (inlined_begin->kind == Symbols::JUMP) {
+			inlined_begin->x += max_block;
+		}
 
-		View def_sv = it->sv;
-		auto [def_it, succ] = cg.try_emplace(def_sv, std::vector<View>{});
-
-		// Function body.
-		for (; it->kind != Ops::OP_RET; ++it) {
-			if (it->kind != Ops::OP_CALL)
-				continue;
-
-			// Function call.
-			View call_sv = it->sv;
-			def_it->second.emplace_back(call_sv);
+		else if (inlined_begin->kind == Symbols::BRANCH) {
+			inlined_begin->x += max_block;
+			inlined_begin->y += max_block;
 		}
 	}
 
-	return cg;
+	it->second.max_block = new_max_block;
 }
 
-// Prune any calls which don't have `main` as an ancestor.
-namespace detail {
-	inline void prune_call_graph(IR& ir, CallGraph& old_cg, CallGraph& cg, View old_sv, View sv) {
-		if (auto it = old_cg.find(sv); it != old_cg.end()) {
-			for (View call: it->second) {
-				if (old_sv == call)
-					break;
+inline size_t opt_function_inlining(const IR& ir, IR& new_ir) {
+	Defs defs;
+	size_t inline_count = 0;  // Count the number of calls we inline.
 
-				detail::prune_call_graph(ir, old_cg, cg, sv, call);
-			}
-
-			cg.insert(*it);
-		}
-	}
-}
-
-inline CallGraph prune_call_graph(IR& ir, CallGraph& old_cg, View sv) {
-	CallGraph cg;
-	detail::prune_call_graph(ir, old_cg, cg, ""_sv, sv);
-	return cg;
-}
-
-
-// Function inlining.
-inline decltype(auto) gather_definitions(IR& ir) {
-	std::unordered_map<View, Def> defs = {
-		{ "main"_sv, { 0, 0 } },
-	};
-
-	// Find all definitions.
 	for (auto it = ir.begin(); it != ir.end(); ++it) {
-		if (it->kind != Ops::OP_DEF)
+		if (it->kind != Symbols::DEF)
 			continue;
 
-		auto def = it;
+		// Start of definition.
+		auto def_it = it;
 
-		while (it->kind != Ops::OP_RET)
-			++it;
+		size_t def_length = 0;
+		size_t max_block = 0;
 
-		size_t begin = std::distance(ir.begin(), def);
-		size_t end = std::distance(ir.begin(), it);
+		// Iterate blocks in definition.
+		for (; it->kind != Symbols::RET; ++it) {
+			// Don't count blocks as part of the definition size.
+			if (eq_none(it->kind, Symbols::BLOCK, Symbols::END))
+				def_length++;
 
-		defs.try_emplace(def->sv, begin, end);
-	}
+			// Check if we can inline this call.
+			if (it->kind == Symbols::CALL) {
+				auto element = defs.find(it->sv);
 
-	return defs;
-}
+				if (element != defs.end()) {
+					perform_inline(new_ir, element);
+					inline_count++;
+					continue; // Do not append the call to `new_ir`.
+				}
+			}
 
-inline decltype(auto) gather_calls(IR& ir) {
-	// Find all call sites.
-	std::vector<size_t> calls;
+			// Count maximum block number.
+			else if (it->kind == Symbols::BLOCK)
+				max_block = max(max_block, it->x);
 
-	// Count calls and record offsets into the IR.
-	for (auto it = ir.begin(); it != ir.end(); ++it) {
-		if (it->kind == Ops::OP_CALL)
-			calls.emplace_back(std::distance(ir.begin(), it));
-	}
-
-	return calls;
-}
-
-void opt_function_inlining(IR& ir) {
-	while (true) {
-		auto defs = gather_definitions(ir);
-		auto calls = gather_calls(ir);
-
-		// Remove any candidate calls that aren't common to both `defs` and `calls`.
-		calls.erase(std::remove_if(calls.begin(), calls.end(), [&] (auto&& x) {
-			auto def_it = defs.find(ir[x].sv);
-
-			// Check if definition is known.
-			if (def_it == defs.end())
-				return true; // Definition must be external, remove this candidate.
-
-			// Check if function called once.
-			size_t n_calls = std::count(calls.begin(), calls.end(), x);
-
-			if (n_calls == 1)
-				return false; // Function is called once so we lose nothing by inlining.
-
-			// Check if function is above inline limit.
-			auto [begin, end] = def_it->second;
-			size_t def_length = end - begin;
-
-			if (def_length > INLINE_LIMIT)
-				return true; // Remove function due to being too large.
-
-			return false;
-		}), calls.end());
-
-		if (calls.empty() or defs.empty())
-			break;
-
-		// Move the noops just after every call.
-		size_t adjust = 0;
-
-		for (size_t callsite: calls) {
-			auto it = ir.begin() + callsite + adjust;
-
-			auto [begin, end] = defs.at(it->sv);
-
-			auto begin_it = ir.begin() + begin;
-			auto end_it = ir.begin() + end;
-
-			if (end_it->kind != Ops::OP_RET)
-				continue;
-
-			it->kind = Ops::OP_NONE;
-			++it;
-
-			++begin_it;  // Skip `def`
-			++begin_it;  // Skip `block`
-			--end_it;    // Skip `end`
-
-			size_t length = std::distance(begin_it, end_it);
-
-			it = ir.begin() + callsite + adjust;
-			ir.insert(it, begin_it, end_it);
-
-			adjust += length;
+			// Emplace current instruction to `new_ir`.
+			new_ir.emplace_back(*it);
 		}
 
-		// Remove noops so they don't interfere with calculating function sizes
-		// in the next pass.
-		ir.erase(std::remove_if(ir.begin(), ir.end(), [] (auto&& x) {
-			return x.kind == Ops::OP_NONE;
-		}), ir.end());
+		new_ir.emplace_back(Symbols::RET);
+
+		// If function definition is below threshold, consider it a candidate
+		// for inlining.
+		if (def_length <= INLINE_LIMIT)
+			auto [element, succ] = defs.try_emplace(def_it->sv, def_it, it, max_block);
 	}
+
+	return inline_count;
 }
 
-// Dead code elimination.
-inline void opt_dead_code_elimination(IR& ir, CallGraph& cg) {
+
+// Dead function elimination.
+using SeenCalls = std::unordered_set<View>;
+
+inline void opt_dead_function_elimination(const IR& ir, IR& new_ir, View ancestor, SeenCalls& seen) {
 	for (auto it = ir.begin(); it != ir.end(); ++it) {
-		if (it->kind != Ops::OP_DEF)
+		if (it->kind != Symbols::DEF or it->sv != ancestor)
 			continue;
 
-		if (cg.find(it->sv) != cg.end())
-			continue;
+		auto def_it = it;
 
-		for (; it->kind != Ops::OP_RET; ++it)
-			it->kind = Ops::OP_NONE;
+		for (; it->kind != Symbols::RET; ++it) {
+			if (it->kind == Symbols::CALL) {
+				auto [element, succ] = seen.emplace(it->sv);
 
-		it->kind = Ops::OP_NONE;
-	}
-}
-
-// Constant folding.
-inline void opt_const_fold(IR& ir) {
-	for (auto it = ir.begin(); it != ir.end(); ++it) {
-		if (it->kind != Ops::OP_BLOCK)
-			continue;
-
-		std::vector<IR::iterator> pushes;
-
-		while (eq_none(it->kind, Ops::OP_END, Ops::OP_RET)) {
-			if (it->kind == Ops::OP_PUSH)
-				pushes.emplace_back(it);
-
-			// Do not allow folding beyond a call boundary.
-			// This is because a function may produce a
-			// number of values at runtime and we cannot
-			// know this at compile time.
-			else if (it->kind == Ops::OP_CALL)
-				pushes.clear();
-
-			else if (it->kind == Ops::OP_COPY) {
-				// Set current instruction to the instruction
-				// pointed to by `cp`.
-				if (it->x + 1 <= pushes.size()) {
-					*it = **(pushes.rbegin() + it->x);
-					continue;  // Skip ++it
-				}
+				if (succ)
+					opt_dead_function_elimination(ir, new_ir, it->sv, seen);
 			}
-
-			else if (it->kind == Ops::OP_MOVE) {
-				// Swap instructions at TOS and instruction
-				// pointed to by `rot`.
-				if (it->x + 1 <= pushes.size()) {
-					it->kind = Ops::OP_NONE;  // Remove `mv`
-					std::rotate(pushes.rbegin(), pushes.rbegin() + it->x, pushes.rbegin() + it->x + 1);
-				}
-			}
-
-			else if (it->kind == Ops::OP_REMOVE) {
-				if (it->x + 1 <= pushes.size()) {
-					auto push_it = pushes.rbegin() + it->x;
-					auto instr_it = *push_it;
-
-					// Set instruction pointed to by `rm` to noop.
-					instr_it->kind = Ops::OP_NONE;
-					it->kind = Ops::OP_NONE;  // Remove `rm`
-
-					// Erase corresponding entry in `pushes`.
-					pushes.erase(std::next(push_it).base());
-				}
-			}
-
-			++it;
 		}
+
+		new_ir.insert(new_ir.end(), def_it, it + 1);
 	}
 }
 
-// Eliminate indirect jumps due to if/else chains.
-inline void opt_indirect_branch_elimination(IR& ir) {
-	for (auto it = ir.begin(); it != ir.end(); ++it) {
-		if (it->kind != Ops::OP_DEF)
-			continue;
 
-		auto def = it++;
-		std::vector<IR::iterator> branches;
 
-		for (; it->kind != Ops::OP_RET; ++it) {
-			if (eq_any(it->kind, Ops::OP_BRANCH, Ops::OP_JUMP))
-				branches.emplace_back(it);
+inline void opt_indirect_branch_elimination(const IR& ir, IR& new_ir) {
+	new_ir = ir;
+}
 
-			else if (it->kind != Ops::OP_BLOCK)
-				continue;
 
-			// Start of a basic block.
-			auto block = it++;
 
-			if (it->kind != Ops::OP_JUMP)
-				continue;
-
-			auto jump = it++;
-
-			if (it->kind != Ops::OP_END)
-				continue;
-
-			auto end = it;
-
-			// Candidate for removal.
-			size_t block_id = block->x;
-			size_t jump_id = jump->x;
-
-			// Loop backwards through branches.
-			for (auto branch_it: branches) {
-				if (branch_it->kind == Ops::OP_BRANCH) {
-					if (branch_it->x == block_id) {
-						branch_it->x = jump_id;
-					}
-
-					else if (branch_it->y == block_id) {
-						branch_it->y = jump_id;
-					}
-				}
-
-				else if (branch_it->kind == Ops::OP_JUMP and branch_it->x == block_id) {
-					branch_it->x = jump_id;
-				}
-			}
-
-			block->kind = Ops::OP_NONE;
-			jump->kind = Ops::OP_NONE;
-			end->kind = Ops::OP_NONE;
-		}
-	}
+inline void opt_const_fold(const IR& ir, IR& new_ir) {
+	new_ir = ir;
 }
 
 }
@@ -335,24 +153,43 @@ int main(int argc, const char* argv[]) {
 		if (not klx::utf_validate(src))
 			ctx.error(klx::Phases::PHASE_ENCODING, src, klx::STR_ENCODING);
 
-		klx::stack_deserialise(ctx);
-
+		klx::ir_parse(ctx);
 
 		klx::IR ir_a = std::move(ctx.instructions);
 		klx::IR ir_b;
 
 		ir_b.reserve(ir_a.capacity());
 
-		klx::opt_function_inlining(ir_a, ir_b);
+		klx::IR* ir_current = &ir_a;
+		klx::IR* ir_new = &ir_b;
 
-		// auto cg = klx::generate_call_graph(ir);
-		// cg = klx::prune_call_graph(ir, cg, "main"_sv);
-		// klx::opt_dead_code_elimination(ir, cg);
+		const auto run_pass = [&] (auto&& x, auto&&... xs) {
+			if constexpr(not std::is_same_v<decltype(x(*ir_current, *ir_new, xs...)), void>) {
+				auto ret = x(*ir_current, *ir_new, xs...);
+				std::swap(ir_current, ir_new);
+				ir_new->clear();
+				return ret;
+			}
 
-		// klx::opt_const_fold(ir);
-		// klx::opt_indirect_branch_elimination(ir);
+			else {
+				x(*ir_current, *ir_new, xs...);
+				std::swap(ir_current, ir_new);
+				ir_new->clear();
+			}
+		};
 
-		klx::stack_serialise(ir);
+
+		// Inline until we have no more candidate functions.
+		while (run_pass(klx::opt_function_inlining) > 0);
+
+		// Eliminate functions which are never called.
+		klx::SeenCalls seen;
+		run_pass(klx::opt_dead_function_elimination, "main"_sv, seen);
+
+		// run_pass(klx::opt_indirect_branch_elimination);
+		// run_pass(klx::opt_const_fold);
+
+		klx::serialise(*ir_current);
 	}
 
 	catch (klx::Error) {
