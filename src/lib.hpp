@@ -48,11 +48,11 @@ enum class TokenTypes {
 	X(IDENTIFIER, "identifier", TokenTypes::BOTH) \
 	X(INTEGER,    "integer",    TokenTypes::BOTH) \
 	\
-	X(ARROW,  "->", TokenTypes::BOTH) \
-	X(LPAREN, "(",  TokenTypes::BOTH) \
-	X(RPAREN, ")",  TokenTypes::BOTH) \
-	X(LBRACE, "{",  TokenTypes::SRC) \
-	X(RBRACE, "}",  TokenTypes::SRC) \
+	X(EFFECT_SEPERATOR, "->", TokenTypes::BOTH) \
+	X(EFFECT_OPEN,      "(",  TokenTypes::BOTH) \
+	X(EFFECT_CLOSE,     ")",  TokenTypes::BOTH) \
+	X(BLOCK_OPEN,       "{",  TokenTypes::SRC) \
+	X(BLOCK_CLOSE,      "}",  TokenTypes::SRC) \
 	\
 	X(COPY,   "copy",   TokenTypes::BOTH) \
 	X(MOVE,   "move",   TokenTypes::BOTH) \
@@ -242,14 +242,7 @@ struct Context: SourceLexer {
 
 
 	inline Context(klx::View src):
-		Lexer::Lexer(src)
-	{
-		effects = {
-			{ symbol_to_string(Symbols::REMOVE), { 1, 0 } },
-			{ symbol_to_string(Symbols::COPY),   { 1, 1 } },
-			{ symbol_to_string(Symbols::MOVE),   { 1, 0 } },
-		};
-	}
+		Lexer::Lexer(src) {}
 
 	template <typename... Ts>
 	decltype(auto) instruction(Ts&&... args) {
@@ -327,7 +320,7 @@ constexpr auto is_keyw = partial_eq_any(
 	Symbols::ELSE,
 	Symbols::DEF,
 	Symbols::DECL,
-	Symbols::ARROW
+	Symbols::EFFECT_SEPERATOR
 );
 
 constexpr auto is_expr = partial_eq_any(
@@ -335,14 +328,14 @@ constexpr auto is_expr = partial_eq_any(
 	Symbols::IDENTIFIER,
 	Symbols::WHILE,
 	Symbols::IF,
-	Symbols::LBRACE,
+	Symbols::BLOCK_OPEN,
 	Symbols::COPY,
 	Symbols::MOVE,
 	Symbols::REMOVE
 );
 
-constexpr auto is_type_annotation = equal(Symbols::LPAREN);
-constexpr auto is_block = equal(Symbols::LBRACE);
+constexpr auto is_type_annotation = equal(Symbols::EFFECT_OPEN);
+constexpr auto is_block = equal(Symbols::BLOCK_OPEN);
 
 // Is a basic instruction (i.e. not block/def/end/ret)
 constexpr auto is_instruction = partial_eq_any(
@@ -371,13 +364,13 @@ inline StackEffect ir_parse_annotation(StackContext& ctx) {
 	ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_INT);
 	size_t in = to_int(ctx.next().view);
 
-	ctx.expect_token(equal(Symbols::ARROW), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::ARROW));
+	ctx.expect_token(equal(Symbols::EFFECT_SEPERATOR), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_SEPERATOR));
 	ctx.next();
 
 	ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_INT);
 	size_t out = to_int(ctx.next().view);
 
-	ctx.expect_token(equal(Symbols::RPAREN), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::RPAREN));
+	ctx.expect_token(equal(Symbols::EFFECT_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_CLOSE));
 	ctx.next();  // skip `)`
 
 	return { in, out };
@@ -641,10 +634,10 @@ inline void src_parse_block(Context& ctx) {
 	ctx.next();  // skip `{`
 	ctx.expect_token(is_expr, ctx.peek().view, STR_EXPR);
 
-	while (eq_none(ctx.peek().kind, Symbols::RBRACE, Symbols::TERMINATOR))
+	while (eq_none(ctx.peek().kind, Symbols::BLOCK_CLOSE, Symbols::TERMINATOR))
 		src_parse_expression(ctx);
 
-	ctx.expect_token(equal(Symbols::RBRACE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::RBRACE));
+	ctx.expect_token(equal(Symbols::BLOCK_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::BLOCK_CLOSE));
 	ctx.next();  // skip `}`
 }
 
@@ -659,7 +652,7 @@ inline void src_parse_expression(Context& ctx) {
 		case Symbols::INTEGER:    return src_parse_literal(ctx);
 		case Symbols::WHILE:      return src_parse_while(ctx);
 		case Symbols::IF:         return src_parse_if(ctx);
-		case Symbols::LBRACE:     return src_parse_block(ctx);
+		case Symbols::BLOCK_OPEN:     return src_parse_block(ctx);
 
 		default:
 			ctx.error(Phases::PHASE_SYNTACTIC, ctx.peek().view, STR_EXPR);
@@ -676,12 +669,12 @@ inline StackEffect src_parse_annotation(Context& ctx) {
 
 	auto* ptr = &in;
 
-	while (eq_none(ctx.peek().kind, Symbols::RPAREN, Symbols::TERMINATOR)) {
-		if (ctx.peek().kind == Symbols::ARROW) {
+	while (eq_none(ctx.peek().kind, Symbols::EFFECT_CLOSE, Symbols::TERMINATOR)) {
+		if (ctx.peek().kind == Symbols::EFFECT_SEPERATOR) {
 			ctx.next();  // skip `->`
 			ptr = &out;
 
-			if (ctx.peek().kind == Symbols::RPAREN)
+			if (ctx.peek().kind == Symbols::EFFECT_CLOSE)
 				break;
 		}
 
@@ -691,7 +684,7 @@ inline StackEffect src_parse_annotation(Context& ctx) {
 		(*ptr)++;
 	}
 
-	ctx.expect_token(equal(Symbols::RPAREN), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::RPAREN));
+	ctx.expect_token(equal(Symbols::EFFECT_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_CLOSE));
 	ctx.next();  // skip `)`
 
 	return { in, out };
