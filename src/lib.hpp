@@ -182,8 +182,8 @@ using SourceLexer = Lexer<TokenTypes::SRC>;
 
 
 struct StackEffect {
-	size_t in = 0;
-	size_t out = 0;
+	size_t in = 0u;
+	size_t out = 0u;
 };
 
 
@@ -192,9 +192,9 @@ struct Op {
 
 	View sv;
 
-	size_t x = 0;
-	size_t y = 0;
-	size_t z = 0;
+	size_t x = 0u;
+	size_t y = 0u;
+	size_t z = 0u;
 
 
 	constexpr Op(Symbols kind_, size_t x_, size_t y_, size_t z_):
@@ -233,16 +233,19 @@ using Effects = std::unordered_map<View, StackEffect>;
 
 
 struct Context: SourceLexer {
-	size_t recent_block = 0;
-	size_t block_id = 0;
-	size_t stack = 0;
+	size_t recent_block = 0u;
+	size_t block_id = 0u;
+	size_t stack = 0u;
 
 	IR instructions;
 	Effects effects;
 
 
 	inline Context(klx::View src):
-		Lexer::Lexer(src) {}
+		Lexer::Lexer(src)
+	{
+		instructions.reserve(instructions.capacity() + src.size());
+	}
 
 	template <typename... Ts>
 	decltype(auto) instruction(Ts&&... args) {
@@ -351,11 +354,11 @@ constexpr auto is_instruction = partial_eq_any(
 );
 
 // Stack IR parsing
-inline StackEffect ir_parse_annotation (StackContext&);
-inline void        ir_parse_def        (StackContext&);
-inline void        ir_parse_block      (StackContext&);
+inline StackEffect ir_parse_annotation  (StackContext&);
+inline void        ir_parse_def         (StackContext&);
+inline void        ir_parse_block       (StackContext&);
 inline void        ir_parse_instruction (StackContext&);
-inline void        ir_parse            (StackContext&);
+inline void        ir_parse             (StackContext&);
 
 
 inline StackEffect ir_parse_annotation(StackContext& ctx) {
@@ -501,7 +504,7 @@ inline void src_parse_call(Context& ctx) {
 		ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_ARG, name);
 
 		size_t arg = to_int(ctx.next().view);
-		ctx.expect_effect(more_equal(arg + 1), name, STR_EFFECT, arg + 1, ctx.stack);
+		ctx.expect_effect(more_equal(arg + 1u), name, STR_EFFECT, arg + 1u, ctx.stack);
 
 		if (tok.kind == Symbols::COPY)
 			ctx.stack++;
@@ -652,7 +655,7 @@ inline void src_parse_expression(Context& ctx) {
 		case Symbols::INTEGER:    return src_parse_literal(ctx);
 		case Symbols::WHILE:      return src_parse_while(ctx);
 		case Symbols::IF:         return src_parse_if(ctx);
-		case Symbols::BLOCK_OPEN:     return src_parse_block(ctx);
+		case Symbols::BLOCK_OPEN: return src_parse_block(ctx);
 
 		default:
 			ctx.error(Phases::PHASE_SYNTACTIC, ctx.peek().view, STR_EXPR);
@@ -664,24 +667,24 @@ inline void src_parse_expression(Context& ctx) {
 inline StackEffect src_parse_annotation(Context& ctx) {
 	ctx.next();  // skip `(`
 
-	size_t in = 0;
-	size_t out = 0;
+	size_t in = 0u;
+	size_t out = 0u;
 
 	auto* ptr = &in;
 
-	while (eq_none(ctx.peek().kind, Symbols::EFFECT_CLOSE, Symbols::TERMINATOR)) {
-		if (ctx.peek().kind == Symbols::EFFECT_SEPERATOR) {
-			ctx.next();  // skip `->`
-			ptr = &out;
-
-			if (ctx.peek().kind == Symbols::EFFECT_CLOSE)
-				break;
-		}
-
+	while (ctx.peek().kind != Symbols::EFFECT_SEPERATOR) {
 		ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
 		ctx.next();  // skip identifier
+		in++;
+	}
 
-		(*ptr)++;
+	ctx.expect_token(equal(Symbols::EFFECT_SEPERATOR), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_SEPERATOR));
+	ctx.next();  // skip `)`
+
+	while (ctx.peek().kind != Symbols::EFFECT_CLOSE) {
+		ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
+		ctx.next();  // skip identifier
+		out++;
 	}
 
 	ctx.expect_token(equal(Symbols::EFFECT_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_CLOSE));
@@ -705,8 +708,8 @@ inline void src_parse_decl(Context& ctx) {
 }
 
 inline void src_parse_def(Context& ctx) {
-	ctx.stack = 0;
-	ctx.block_id = 0;
+	ctx.stack = 0u;
+	ctx.block_id = 0u;
 
 	ctx.next();  // skip `def`
 
@@ -735,8 +738,8 @@ inline void src_parse_def(Context& ctx) {
 
 inline void src_parse_statement(Context& ctx) {
 	switch (ctx.peek().kind) {
-		case Symbols::DECL:  return src_parse_decl(ctx);
-		case Symbols::DEF:   return src_parse_def(ctx);
+		case Symbols::DECL: return src_parse_decl(ctx);
+		case Symbols::DEF:  return src_parse_def(ctx);
 
 		default:
 			ctx.error(Phases::PHASE_SYNTACTIC, ctx.peek().view, STR_STMT);
