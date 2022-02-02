@@ -4,11 +4,9 @@
 #include <lib.hpp>
 
 namespace klx {
-	constexpr size_t INLINE_LIMIT = 20;
-}
 
+constexpr size_t INLINE_LIMIT = 20;
 
-namespace klx {
 
 // Inlining.
 struct Def {
@@ -100,6 +98,9 @@ inline size_t opt_function_inlining(const IR& ir, IR& new_ir) {
 		if (def_length <= INLINE_LIMIT)
 			auto [element, succ] = defs.try_emplace(def_it->sv, def_it, it, max_block);
 	}
+
+	if (ir.size() == new_ir.size())
+		return 0;
 
 	return inline_count;
 }
