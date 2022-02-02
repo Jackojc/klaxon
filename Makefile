@@ -4,7 +4,7 @@
 
 include config.mk
 
-all: options klaxon
+all: options build
 
 config:
 	@mkdir -p $(BUILD_DIR)
@@ -15,9 +15,12 @@ options:
 	@printf "san \033[32m$(san)\033[0m | "
 	@printf "cflags \033[32m-std=$(CXXSTD) $(CXXFLAGS)\033[0m\n"
 
-klaxon: config
+build: $(SRCS)
+
+$(SRCS): options config
+	@printf "tgt \033[32m$@\033[0m\n"
 	@$(CXX) -std=$(CXXSTD) $(CXXWARN) $(CXXFLAGS) $(LDFLAGS) $(CPPFLAGS) $(INC) \
-		$(LIBS) -o $(BUILD_DIR)/$(TARGET) $(SRC)
+		$(LIBS) -o $@ $(SRC_DIR)/$(basename $(notdir $@)).cpp
 
 clean:
 	rm -rf $(BUILD_DIR)/ *.gcda

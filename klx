@@ -1,0 +1,39 @@
+#!/usr/bin/env sh
+
+artifacts="build"
+file="a.out"
+
+SEP='#'
+
+run() {
+	time -f "%es$SEP%MKiB$SEP%C" -ao "$artifacts/$file.time.txt" -- $@
+}
+
+prettify_fields() {
+	awk -F "$SEP" "{printf \"\033[1;32m%s$SEP\033[33m%s$SEP\033[34m%s\033[0m\n\", \$1, \$2, \$3;}" $@
+}
+
+set -e
+
+# preprocess
+cat $@ | m4 -P > "$artifacts/$file.pre"
+
+> "$artifacts/$file.time.txt"  # clear times file
+
+# compile and optimise
+run ./build/klx < "$artifacts/$file.pre"   > "$artifacts/$file.unop.kir"
+run ./build/opt < "$artifacts/$file.unop.kir"  > "$artifacts/$file.kir"
+
+# control flow graphs
+run ./build/cfg < "$artifacts/$file.unop.kir"  > "$artifacts/$file.unop.dot"
+run ./build/cfg < "$artifacts/$file.kir"   > "$artifacts/$file.dot"
+
+# generate control flow graphs
+run dot -Tpng     "$artifacts/$file.unop.dot" -o "$artifacts/$file.unop.png"
+run dot -Tpng     "$artifacts/$file.dot"  -o "$artifacts/$file.png"
+
+prettify_fields "$artifacts/$file.time.txt" | column -s "$SEP" -t
+
+# nasm -felf64 -o "$artifacts/$file.o" "$file.asm"
+# ld.lld -s -n --gc-sections --lto-O3 -O3 -o "$artifacts/$file" "$artifacts/$file.o"
+# strip -R .note -R .comment -X -x -s "$artifacts/$file"
