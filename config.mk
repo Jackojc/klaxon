@@ -20,7 +20,7 @@ san ?= no
 ifeq ($(dbg),no)
 	CXXFLAGS+=-O3 -march=native -flto -DNDEBUG -s
 else ifeq ($(dbg),yes)
-	CXXFLAGS+=-O0 -g -fno-omit-frame-pointer
+	CXXFLAGS+=-Og -g -fno-omit-frame-pointer
 else
 $(error dbg should be either yes or no)
 endif

@@ -14,7 +14,7 @@ int main(int argc, const char* argv[]) {
 			ctx.error(klx::Phases::PHASE_ENCODING, src, klx::STR_ENCODING);
 
 		klx::src_parse(ctx);
-		klx::serialise(ctx.instructions);
+		klx::serialise_ir(ctx.instructions);
 	}
 
 	catch (klx::Error) {

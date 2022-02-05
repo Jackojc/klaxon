@@ -77,6 +77,7 @@ inline size_t opt_function_inlining(const IR& ir, IR& new_ir) {
 				auto element = defs.find(it->sv);
 
 				if (element != defs.end()) {
+					KLX_LOG(klx::LOG_LEVEL_2, "inlining '{}' which is called by '{}'", it->sv, def_it->sv);
 					perform_inline(new_ir, element);
 					inline_count++;
 					continue; // Do not append the call to `new_ir`.
@@ -95,9 +96,13 @@ inline size_t opt_function_inlining(const IR& ir, IR& new_ir) {
 
 		// If function definition is below threshold, consider it a candidate
 		// for inlining.
-		if (def_length <= INLINE_LIMIT)
+		if (def_length <= INLINE_LIMIT) {
+			KLX_LOG(klx::LOG_LEVEL_2, "new candidate '{}'", def_it->sv);
 			auto [element, succ] = defs.try_emplace(def_it->sv, def_it, it, max_block);
+		}
 	}
+
+	KLX_LOG(klx::LOG_LEVEL_3, "finished inlining pass. old={}, new={}", ir.size(), new_ir.size());
 
 	if (ir.size() == new_ir.size())
 		return 0;
@@ -179,18 +184,19 @@ int main(int argc, const char* argv[]) {
 			}
 		};
 
+		klx::SeenCalls seen;
+		run_pass(klx::opt_dead_function_elimination, "main"_sv, seen);
 
 		// Inline until we have no more candidate functions.
 		while (run_pass(klx::opt_function_inlining) > 0);
 
 		// Eliminate functions which are never called.
-		klx::SeenCalls seen;
 		run_pass(klx::opt_dead_function_elimination, "main"_sv, seen);
 
 		// run_pass(klx::opt_indirect_branch_elimination);
 		// run_pass(klx::opt_const_fold);
 
-		klx::serialise(*ir_current);
+		klx::serialise_ir(*ir_current);
 	}
 
 	catch (klx::Error) {

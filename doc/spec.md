@@ -14,9 +14,9 @@
 	Implementation defined size
 
 ### Core Words
-	drop
-	at
-	rot
+	remove
+	copy
+	move
 
 ### Implementation Defined Words
 	+ - * / % << >>
@@ -36,3 +36,4 @@
 	Snake case
 	Tabs for indentation
 	80 columns
+	OVS style naming. i.e: size_str/size_vec vs str_size/vec_size

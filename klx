@@ -20,17 +20,17 @@ cat $@ | m4 -P > "$artifacts/$file.pre"
 
 > "$artifacts/$file.time.txt"  # clear times file
 
-# compile and optimise
-run ./build/klx < "$artifacts/$file.pre"   > "$artifacts/$file.unop.kir"
-run ./build/opt < "$artifacts/$file.unop.kir"  > "$artifacts/$file.kir"
+# unoptimised
+run ./build/klx < "$artifacts/$file.pre" > "$artifacts/$file.unop.kir"
+run ./build/cfg < "$artifacts/$file.unop.kir" > "$artifacts/$file.unop.dot"
+run dot -Tpng "$artifacts/$file.unop.dot" -o "$artifacts/$file.unop.png"
+run ./build/x86_64-sysv < "$artifacts/$file.unop.kir" > "$artifacts/$file.unop.asm"
 
-# control flow graphs
-run ./build/cfg < "$artifacts/$file.unop.kir"  > "$artifacts/$file.unop.dot"
-run ./build/cfg < "$artifacts/$file.kir"   > "$artifacts/$file.dot"
-
-# generate control flow graphs
-run dot -Tpng     "$artifacts/$file.unop.dot" -o "$artifacts/$file.unop.png"
-run dot -Tpng     "$artifacts/$file.dot"  -o "$artifacts/$file.png"
+# optimised
+# run ./build/opt < "$artifacts/$file.unop.kir" > "$artifacts/$file.kir"
+# run ./build/cfg < "$artifacts/$file.kir" > "$artifacts/$file.dot"
+# run dot -Tpng "$artifacts/$file.dot" -o "$artifacts/$file.png"
+# run ./build/x86_64-sysv < "$artifacts/$file.kir" > "$artifacts/$file.asm"
 
 prettify_fields "$artifacts/$file.time.txt" | column -s "$SEP" -t
 

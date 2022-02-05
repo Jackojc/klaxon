@@ -788,7 +788,7 @@ inline std::ostream& operator<<(std::ostream& os, klx::Op instr) {
 	return os;
 }
 
-inline void serialise(const IR& ir) {
+inline void serialise_ir(const IR& ir) {
 	for (auto& op: ir) {
 		if (op.kind == Symbols::NONE)
 			continue;
