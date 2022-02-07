@@ -1,0 +1,21 @@
+// TOKENS
+comment ::= ? #.+$ ?
+identifier ::= ? [A-z_][A-z0-9_]* ?
+int ::= ? [0-9_]+ ?
+
+
+// GRAMMAR
+arg ::= ( 'literal' <int> ) | <int>
+
+instruction ::=
+	( 'let' <int> <arg> ) |
+
+	( 'push' <arg> ) |
+	( 'pop' <arg> ) |
+
+	( 'call' <identifier> ) |
+	( 'label' <identifier> ) |
+
+	'ret'
+
+program ::= <instruction>+
