@@ -9,7 +9,7 @@ provide-module -override kir %{
 	add-highlighter shared/kir/comment/ fill comment
 
 	# literals
-	add-highlighter shared/kir/other/ regex %{\b[_0-9]+} 0:value
+	add-highlighter shared/kir/other/ regex %{\b[0-9]+} 0:value
 
 	# keywords and operators
 	add-highlighter shared/kir/other/ regex "\b(def|block|ret|end|copy|remove|move|push|jump|branch|call)\b" 0:keyword
