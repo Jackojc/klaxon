@@ -29,6 +29,7 @@ namespace klx {
 	constexpr View STR_ANNOTATION        = "expecting an effect annotation"_sv;
 
 	constexpr View STR_ENCODING          = "invalid source encoding"_sv;
+	constexpr View STR_UNKNOWN_IR        = "invalid IR instruction '{}'"_sv;
 
 }
 

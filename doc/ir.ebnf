@@ -1,19 +1,25 @@
 // TOKENS
-int ::= ? [0-9_]+ ? | ? 0x[0-9A-z_]+ ? | ? 0b[0-1_]+ ? | ? 0o[0-7_]+ ?
-identifier ::= ? \S+ ?
 comment ::= ? #.+$ ?
+identifier ::= ? [A-z_][A-z0-9_]* ?
+int ::= ? [0-9_]+ ?
 
 
 // GRAMMAR
 effect ::= '(' <int> '->' <int> ')'
 
-def ::= 'def' <identifier> <effect> <block>+ 'ret'
-block ::= 'block' <int> <effect> <instruction>+ 'end'
+decl ::= ( 'intern' | 'extern' ) <identifier> <effect>
+block ::= 'block' <int> <instruction>+ 'end'
+def ::= 'def' <identifier> <block>+ 'ret'
 
 instruction ::=
-	( 'copy' | 'remove' | 'move' | 'push' | 'jump' ) <int> |
-	( 'branch' <int> <int> ) |
-	( 'call' <identifier> <effect> )
+	( 'load' <int> <int> ) |  // Set a register to a literal value
+	( 'copy' <int> <int> ) |  // Copy a register to another register
 
-program ::= ( <def> | <block> )+
+	( 'push' <int> ) |  // Push value in register to stack
+	( 'pop' <int> ) |   // Pop value from stack to register
 
+	( 'call' <identifier> ) |
+	( 'jump' <int> ) |
+	( 'branch' <int> <int> )
+
+program ::= ( <def> | <block> | <decl> )+

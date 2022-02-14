@@ -5,17 +5,21 @@ int ::= ? [0-9_]+ ?
 
 
 // GRAMMAR
-arg ::= ( 'literal' <int> ) | <int>
+effect ::= '(' <int> '->' <int> ')'
+
+decl ::= ( 'intern' | 'extern' ) <effect>
+block ::= 'block' <int> <instruction>+ 'end'
+def ::= 'def' <identifier> <block>+ 'ret'
 
 instruction ::=
-	( 'let' <int> <arg> ) |
+	( 'load' <int> <int> ) |  // Set a register to a literal value
+	( 'copy' <int> <int> ) |  // Copy a register to another register
 
-	( 'push' <arg> ) |
-	( 'pop' <arg> ) |
+	( 'push' <int> ) |  // Push value in register to stack
+	( 'pop' <int> ) |   // Pop value from stack to register
 
 	( 'call' <identifier> ) |
-	( 'label' <identifier> ) |
+	( 'jump' <int> ) |
+	( 'branch' <int> <int> )
 
-	'ret'
-
-program ::= <instruction>+
+program ::= ( <def> | <block> | <decl> )+

@@ -9,10 +9,10 @@ provide-module -override klx %{
 	add-highlighter shared/klx/comment/ fill comment
 
 	# literals
-	add-highlighter shared/klx/other/ regex "^|\s\K(\d+)\s|$" 0:value
+	add-highlighter shared/klx/other/ regex "\b(\d+)\b\s*" 0:value
 
 	# keywords and operators
-	add-highlighter shared/klx/other/ regex "\b(move|copy|remove|while|if|else|def|decl)\b" 0:keyword
+	add-highlighter shared/klx/other/ regex "\b(move|copy|remove|while|if|else|def|decl|extern)\b" 0:keyword
 
 	# string
 	add-highlighter shared/klx/string region '"' (?<!\\)(\\\\)*" group

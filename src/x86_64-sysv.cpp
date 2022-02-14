@@ -1,3 +1,5 @@
+#include <sstream>
+#include <iomanip>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -102,26 +104,32 @@ namespace klx {
 
 #undef REGISTERS
 
+inline std::ostream& operator<<(std::ostream& os, Registers r) {
+	return (os << register_to_string(r));
+}
+
 #define MACHINE_OPS \
-	X(NONE, "nop") \
+	X(NONE,  "nop") \
 	X(LABEL, "label") \
 	\
 	X(CALL, "call") \
 	X(RET,  "ret") \
-	X(MOV, "mov") \
-	X(JMP, "jmp") \
-	X(JZ, "jz") \
+	X(MOV,  "mov") \
+	X(JMP,  "jmp") \
+	X(JZ,   "jz") \
+	X(JNZ,  "jnz") \
 	X(TEST, "test") \
 	\
-	X(PUSH, "push") \
-	X(POP, "pop") \
+	X(PUSH_REG, "push") \
+	X(PUSH_LIT, "push") \
+	X(POP,  "pop") \
 	\
-	X(SETE, "sete") \
+	X(SETE,  "sete") \
 	X(SETNE, "setne") \
-	X(SETL, "setl") \
-	X(SETG, "setg") \
-	X(SETGE, "setge") \
+	X(SETL,  "setl") \
 	X(SETLE, "setle") \
+	X(SETG,  "setg") \
+	X(SETGE, "setge") \
 	\
 	X(ADD, "add") \
 	X(SUB, "sub") \
@@ -138,60 +146,64 @@ namespace klx {
 	X(NOT, "not")
 
 	#define X(name, str) name,
-		enum class MachineOps { MACHINE_OPS };
+		enum class AsmOps { MACHINE_OPS };
 	#undef X
 
 	#define X(name, str) str##_sv,
 		constexpr View MACHINEOP_TO_STRING[] = { MACHINE_OPS };
 	#undef X
 
-	constexpr View symbol_to_string(MachineOps mo) {
+	constexpr View asm_to_string(AsmOps mo) {
 		return MACHINEOP_TO_STRING[(int)mo];
 	}
 
 #undef MACHINE_OPS
 
-struct MachineOp {
-	MachineOps kind = MachineOps::NONE;
+inline std::ostream& operator<<(std::ostream& os, AsmOps a) {
+	return (os << asm_to_string(a));
+}
 
-	View sv;
+struct AsmOp {
+	AsmOps kind = AsmOps::NONE;
 
-	size_t x = 0;
-	size_t y = 0;
-	size_t z = 0;
+	size_t i = 0u;
+
+	View x;
+	View y;
+	View z;
 
 
-	constexpr MachineOp(MachineOps kind_, size_t x_, size_t y_, size_t z_):
+	constexpr AsmOp(AsmOps kind_, View x_, View y_, View z_):
 		kind(kind_), x(x_), y(y_), z(z_) {}
 
-	constexpr MachineOp(MachineOps kind_, size_t x_, size_t y_):
+	constexpr AsmOp(AsmOps kind_, View x_, View y_):
 		kind(kind_), x(x_), y(y_) {}
 
-	constexpr MachineOp(MachineOps kind_, size_t x_):
+	constexpr AsmOp(AsmOps kind_, View x_):
 		kind(kind_), x(x_) {}
 
 
-	constexpr MachineOp(MachineOps kind_, View sv_):
-		kind(kind_), sv(sv_) {}
+	constexpr AsmOp(AsmOps kind_, size_t i_):
+		kind(kind_), i(i_) {}
 
-	constexpr MachineOp(MachineOps kind_, View sv_, size_t x_, size_t y_, size_t z_):
-		kind(kind_), sv(sv_), x(x_), y(y_), z(z_) {}
+	constexpr AsmOp(AsmOps kind_, size_t i_, View x_, View y_, View z_):
+		kind(kind_), i(i_), x(x_), y(y_), z(z_) {}
 
-	constexpr MachineOp(MachineOps kind_, View sv_, size_t x_, size_t y_):
-		kind(kind_), sv(sv_), x(x_), y(y_) {}
+	constexpr AsmOp(AsmOps kind_, size_t i_, View x_, View y_):
+		kind(kind_), i(i_), x(x_), y(y_) {}
 
-	constexpr MachineOp(MachineOps kind_, View sv_, size_t x_):
-		kind(kind_), sv(sv_), x(x_) {}
+	constexpr AsmOp(AsmOps kind_, size_t i_, View x_):
+		kind(kind_), i(i_), x(x_) {}
 
 
-	constexpr MachineOp(MachineOps kind_):
+	constexpr AsmOp(AsmOps kind_):
 		kind(kind_) {}
 
-	constexpr MachineOp():
-		kind(MachineOps::NONE) {}
+	constexpr AsmOp():
+		kind(AsmOps::NONE) {}
 };
 
-using Assembly = std::vector<MachineOp>;
+using Assembly = std::vector<AsmOp>;
 
 inline Assembly code_generation(const IR& ir) {
 	Assembly assembly;
@@ -201,32 +213,138 @@ inline Assembly code_generation(const IR& ir) {
 			continue;
 
 		auto def_it = it++;
+		assembly.emplace_back(AsmOps::LABEL, 0, def_it->sv);
 
 		for (; it->kind != Symbols::RET; ++it) {
 			if (it->kind != Symbols::BLOCK)
 				continue;
 
 			auto block_it = it++;
+			assembly.emplace_back(AsmOps::LABEL, block_it->x, def_it->sv);
 
 			for (; it->kind != Symbols::END; ++it) {
 				switch (it->kind) {
-					case Symbols::DEF: {
-
+					case Symbols::BRANCH: {
+						assembly.emplace_back(AsmOps::JZ, it->x, def_it->sv);
 					} break;
 
-					case Symbols::BLOCK: {
-
+					case Symbols::CALL: {
+						assembly.emplace_back(AsmOps::CALL, it->sv);
 					} break;
 
-					case Symbols:: : {
-
+					case Symbols::PUSH: {
+						assembly.emplace_back(AsmOps::PUSH_LIT, it->x);
 					} break;
+
+					default: break;
 				}
 			}
 		}
+
+		assembly.emplace_back(AsmOps::RET);
 	}
 
 	return assembly;
+}
+
+template <typename... Ts>
+inline std::string label_mangle(Ts&&... args) {
+	std::ostringstream ss;
+	((ss << std::forward<Ts>(args)), ...);
+
+	std::string s = ss.str();
+	std::ostringstream hx_ss;
+
+	hx_ss << std::hex << std::setfill('0') << "KLX_";
+
+	for (char c: s) {
+		// ASCII
+		if (
+			(c >= 'a' and c <= 'z') or
+			(c >= 'A' and c <= 'Z') or
+			(c >= '0' and c <= '9') or
+			(c == '_')
+		)
+			hx_ss << c;
+
+		// UTF-8
+		else
+			hx_ss << std::setw(2) << (uint32_t)c;
+	}
+
+	return hx_ss.str();
+}
+
+inline std::ostream& operator<<(std::ostream& os, klx::AsmOp instr) {
+	switch (instr.kind) {
+		case AsmOps::LABEL: break;
+
+		default:
+			out(os, instr.kind); break;
+	}
+
+	switch (instr.kind) {
+		case AsmOps::LABEL:
+			outfmt(os, "{}_{}:  ;; {}_{}", label_mangle(instr.x), instr.i, instr.x, instr.i); break;
+
+		case AsmOps::CALL:
+		case AsmOps::JMP:
+		case AsmOps::JZ:
+			outfmt(os, " {}_{}  ;; {}_{}", label_mangle(instr.x), instr.i, instr.x, instr.i); break;
+
+		case AsmOps::MOV:
+		case AsmOps::TEST:
+
+		case AsmOps::ADD:
+		case AsmOps::SUB:
+		case AsmOps::MUL:
+		case AsmOps::DIV:
+		case AsmOps::MOD:
+
+		case AsmOps::AND:
+		case AsmOps::OR:
+		case AsmOps::XOR:
+		case AsmOps::NOT:
+
+		case AsmOps::SAL:
+		case AsmOps::SAR:
+			outfmt(os, " {} {}", instr.x, instr.y); break;
+
+		case AsmOps::PUSH_LIT:
+			out(os, " qword ", instr.i); break;
+
+		case AsmOps::PUSH_REG:
+		case AsmOps::POP:
+
+		case AsmOps::SETE:
+		case AsmOps::SETNE:
+		case AsmOps::SETL:
+		case AsmOps::SETLE:
+		case AsmOps::SETG:
+		case AsmOps::SETGE:
+			out(os, " ", instr.x); break;
+
+		case AsmOps::RET:
+		case AsmOps::NONE:
+		default: break;
+	}
+
+	return os;
+}
+
+inline void serialise_asm(const Assembly& assembly) {
+	for (auto& op: assembly) {
+		if (op.kind == AsmOps::NONE)
+			continue;
+
+		switch (op.kind) {
+			case AsmOps::LABEL: break;
+			default:
+				print("\t"); break;
+		}
+
+		println(op);
+	}
 }
 
 }
@@ -245,7 +363,8 @@ int main(int argc, const char* argv[]) {
 		klx::ir_parse(ctx);
 		klx::IR& ir = ctx.instructions;
 
-		klx::code_generation(ir);
+		klx::Assembly assembly = klx::code_generation(ir);
+		klx::serialise_asm(assembly);
 	}
 
 	catch (klx::Error) {

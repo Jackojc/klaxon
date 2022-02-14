@@ -14,6 +14,7 @@ namespace klx {
 		X(PHASE_LEXICAL, lexical) \
 		X(PHASE_SYNTACTIC, syntactic) \
 		X(PHASE_SEMANTIC, semantic) \
+		X(PHASE_INTERMEDIATE, intermediate) \
 		X(PHASE_CODEGEN, codegen)
 
 		#define X(name, str) name,

@@ -19,11 +19,13 @@
 	move
 
 ### Implementation Defined Words
-	+ - * / % << >>
-	< > =
+	add sub mul div mod lsh rsh
+	lt gt eq
 	and or not
-	& | ~
+	band bor bnot
 	word
+	load
+	store
 
 ### Guaranteed Optimisations
 	Inlining

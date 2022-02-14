@@ -7,14 +7,14 @@ int main(int argc, const char* argv[]) {
 	std::string input(begin, end);
 
 	klx::View src { &*input.begin(), &*input.end() };
-	klx::Context ctx { src };
+	klx::SourceContext ctx { src };
 
 	try {
 		if (not klx::utf_validate(src))
 			ctx.error(klx::Phases::PHASE_ENCODING, src, klx::STR_ENCODING);
 
 		klx::src_parse(ctx);
-		klx::serialise_ir(ctx.instructions);
+		klx::serialise_ir(std::cout, ctx);
 	}
 
 	catch (klx::Error) {
