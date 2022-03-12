@@ -1,5 +1,5 @@
 // TOKENS
-int ::= ? [0-9_]+ ? | ? 0x[0-9A-z_]+ ? | ? 0b[0-1_]+ ? | ? 0o[0-7_]+ ?
+int ::= ? [0-9_]+ ? | ? 0x[0-9A-z_]+ ? | ? 0b[0-1_]+ ?
 char ::= "'" ? . ?
 string ::= '"' ? .+ ? '"'
 literal ::= <int> | <char> | <string>
@@ -30,7 +30,7 @@ effect ::= '(' <identifier>* [ '->' <identifier>* ] ')'  // ( x y -> z )
 def ::= 'def' <identifier> <expression>
 
 // decl foo (int int -> int)
-decl ::= 'decl' <identifier> <effect>
+decl ::= ( 'decl' | 'extern' ) <identifier> <effect>
 
 
 // EXPRESSIONS
@@ -56,5 +56,5 @@ ops ::= (
 
 // at @3
 intrinsic ::= <ops> | <arg_intrinsic>
-arg_intrinsic ::= ( 'cp' | 'mv' | 'rm' ) <literal>
+arg_intrinsic ::= ( 'copy' | 'move' | 'remove' ) <literal>
 

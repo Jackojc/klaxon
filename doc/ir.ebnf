@@ -8,7 +8,7 @@ int ::= ? [0-9_]+ ?
 effect ::= '(' <int> '->' <int> ')'
 
 decl ::= ( 'intern' | 'extern' ) <identifier> <effect>
-block ::= 'block' <int> <instruction>+ 'end'
+block ::= 'block' <int> <instruction>* 'end'
 def ::= 'def' <identifier> <block>+ 'ret'
 
 instruction ::=

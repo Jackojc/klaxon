@@ -24,6 +24,7 @@
 	and or not
 	band bor bnot
 	word
+	byte
 	load
 	store
 
@@ -38,4 +39,5 @@
 	Snake case
 	Tabs for indentation
 	80 columns
-	OVS style naming. i.e: size_str/size_vec vs str_size/vec_size
+	OVS style naming. i.e: size-str/size-vec vs str-size/vec-size
+	Kebab case
