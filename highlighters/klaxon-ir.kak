@@ -12,7 +12,7 @@ provide-module -override kir %{
 	add-highlighter shared/kir/other/ regex %{\b[0-9]+} 0:value
 
 	# keywords and operators
-	add-highlighter shared/kir/other/ regex "\b(local|global|block|end|def|ret|load|copy|push|pop|call|jump|branch)\b" 0:keyword
+	add-highlighter shared/kir/other/ regex "\b(local|global|block|end|fn|ret|load|copy|push|pop|call|jump|branch)\b" 0:keyword
 }
 
 hook global BufCreate .*\.(kir) %{ set-option buffer filetype kir }

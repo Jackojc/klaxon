@@ -9,10 +9,13 @@ provide-module -override klx %{
 	add-highlighter shared/klx/comment/ fill comment
 
 	# literals
-	add-highlighter shared/klx/other/ regex "\b(\d+)\b\s*" 0:value
+	add-highlighter shared/klx/other/ regex "(\s|^)\K(\d+)(\s|$)(\d+(\s|$))*" 0:value                              # integer
+	add-highlighter shared/klx/other/ regex "(\s|^)\K('\w)(\s|$)('\w(\s|$))*" 0:value                              # character
+	add-highlighter shared/klx/other/ regex "(\s|^)\K(\\x[A-Fa-f0-9]{2})(\s|$)(\\x[A-Fa-f0-9]{2}(\s|$))*" 0:value  # hex
+	add-highlighter shared/klx/other/ regex "(\s|^)\K(0b[0-1]{8})(\s|$)(0b[0-1]{8}(\s|$))*" 0:value                # binary
 
 	# keywords and operators
-	add-highlighter shared/klx/other/ regex "\b(move|copy|remove|while|if|else|def|decl|extern)\b" 0:keyword
+	add-highlighter shared/klx/other/ regex "\b(move|copy|remove|while|if|else|fn|decl|extern)\b" 0:keyword
 
 	# string
 	add-highlighter shared/klx/string region '"' (?<!\\)(\\\\)*" group
