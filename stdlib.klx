@@ -1,193 +1,216 @@
 # Internal functions
 # Stack operations
-def dup ( a -> a a )
+fn dup ( a -> a a )
 	copy 0
 
-def over ( a b -> a b a )
+fn over ( a b -> a b a )
 	copy 1
 
-def swap ( a b -> b a )
+fn swap ( a b -> b a )
 	move 1
 
-def drop ( a -> )
+fn drop ( a -> )
 	remove 0
 
-def nip ( a b -> b )
+fn nip ( a b -> b )
 	remove 1
 
-def rotl ( a b c -> b c a )
+fn rotl ( a b c -> b c a )
 	move 2
 
-def rotr ( a b c -> c a b ) {
+fn rotr ( a b c -> c a b ) {
 	rotl rotl
 }
 
-def tuck ( a b -> b a b ) {
+fn tuck ( a b -> b a b ) {
 	over over
 	remove 3
 }
 
 
 # Two element variants of stack operations
-def dup2 ( a b -> a b a b ) {
+fn pair-dup ( a b -> a b a b ) {
 	over over
 }
 
-def over2 ( a b c d -> a b c d a b ) {
+fn pair-over ( a b c d -> a b c d a b ) {
 	copy 3
 	copy 3
 }
 
-def swap2 ( a b c d -> c d a b ) {
+fn pair-swap ( a b c d -> c d a b ) {
 	move 3
 	move 3
 }
 
-def drop2 ( a b -> ) {
+fn pair-drop ( a b -> ) {
 	drop drop
 }
 
-def nip2 ( a b c -> c ) {
+fn pair-nip ( a b c -> c ) {
 	nip nip
 }
 
-def rotl2 ( a b c d e f -> c d e f a b ) {
+fn pair-rotl ( a b c d e f -> c d e f a b ) {
 	move 5
 	move 5
 }
 
-def rotr2 ( a b c d e f -> e f a b c d ) {
-	rotl2 rotl2
+fn pair-rotr ( a b c d e f -> e f a b c d ) {
+	pair-rotl pair-rotl
 }
 
-def tuck2 ( a b c d -> c d a b c d ) {
-	swap2 over2
+fn pair-tuck ( a b c d -> c d a b c d ) {
+	pair-swap pair-over
 }
 
 
 # External functions
 # Arithmetic
-global add ( a b -> q )
-global sub ( a b -> q )
-global mul ( a b -> q )
-global div ( a b -> q )
-global mod ( a b -> q )
+extern add ( a b -> q )
+extern sub ( a b -> q )
+extern mul ( a b -> q )
+extern div ( a b -> q )
+extern mod ( a b -> q )
 
-global lsh ( a b -> q )
-global rsh ( a b -> q )
+extern lsh ( a b -> q )
+extern rsh ( a b -> q )
 
 # Logical
-global and ( a b -> q )
-global or ( a b -> q )
-global xor ( a b -> q )
-global not ( a -> a )
+extern and ( a b -> q )
+extern or ( a b -> q )
+extern xor ( a b -> q )
+extern not ( a -> a )
 
 # Bitwise
-global band ( a b -> q )
-global bor ( a b -> q )
-global bxor ( a b -> q )
-global bnot ( a -> a )
+extern band ( a b -> q )
+extern bor ( a b -> q )
+extern bxor ( a b -> q )
+extern bnot ( a -> a )
 
 # Comparisons
-global eq ( a b -> q )
-global lt ( a b -> q )
-global gt ( a b -> q )
-global lte ( a b -> q )
-global gte ( a b -> q )
+extern eq ( a b -> q )
+fn not-eq ( a b -> q ) { eq not }
+extern lt ( a b -> q )
+extern gt ( a b -> q )
+extern lte ( a b -> q )
+extern gte ( a b -> q )
 
 # Misc
-global word ( -> a ) # Get word size of current platform
+extern word ( -> a ) # Get word size of current platform
 
 
 # Aliases
-def + ( a b -> q ) add
-def - ( a b -> q ) sub
-def * ( a b -> q ) mul
-def / ( a b -> q ) div
-def % ( a b -> q ) mod
+fn + ( a b -> q ) add
+fn - ( a b -> q ) sub
+fn * ( a b -> q ) mul
+fn / ( a b -> q ) div
+fn % ( a b -> q ) mod
 
-def << ( a b -> q ) lsh
-def >> ( a b -> q ) rsh
+fn << ( a b -> q ) lsh
+fn >> ( a b -> q ) rsh
 
-def && ( a b -> q ) and
-def || ( a b -> q ) or
-def ^^ ( a b -> q ) xor
-def !  ( a -> a )   not
+fn && ( a b -> q ) and
+fn || ( a b -> q ) or
+fn ^^ ( a b -> q ) xor
+fn !  ( a -> a )   not
 
-def & ( a b -> q ) band
-def | ( a b -> q ) bor
-def ^ ( a b -> q ) bxor
-def ~ ( a -> a )   bnot
+fn & ( a b -> q ) band
+fn | ( a b -> q ) bor
+fn ^ ( a b -> q ) bxor
+fn ~ ( a -> a )   bnot
 
-def =  ( a b -> q ) eq
-def != ( a b -> q ) { eq not }
-def <  ( a b -> q ) lt
-def >  ( a b -> q ) gt
-def <= ( a b -> q ) lte
-def >= ( a b -> q ) gte
+fn =  ( a b -> q ) eq
+fn != ( a b -> q ) not-eq
+fn <  ( a b -> q ) lt
+fn >  ( a b -> q ) gt
+fn <= ( a b -> q ) lte
+fn >= ( a b -> q ) gte
+
+# Two element variants
+fn pair-add ( a b c d -> q1 q2 ) { + rotr + swap }
+fn pair-sub ( a b c d -> q1 q2 ) { - rotr - swap }
+fn pair-mul ( a b c d -> q1 q2 ) { * rotr * swap }
+fn pair-div ( a b c d -> q1 q2 ) { / rotr / swap }
+fn pair-mod ( a b c d -> q1 q2 ) { % rotr % swap }
+
+fn pair-lsh ( a b c d -> q1 q2 ) { << rotr << swap }
+fn pair-rsh ( a b c d -> q1 q2 ) { >> rotr >> swap }
+
+fn pair-and ( a b c d -> q1 q2 ) { && rotr && swap }
+fn pair-or  ( a b c d -> q1 q2 ) { || rotr || swap }
+fn pair-xor ( a b c d -> q1 q2 ) { ^^ rotr ^^ swap }
+fn pair-not ( a b -> q1 q2 )     { !  swap !  swap }
+
+fn pair-eq     ( a b c d -> q1 q2 ) { eq     rotr eq     swap }
+fn pair-not-eq ( a b c d -> q1 q2 ) { not-eq rotr not-eq swap }
+fn pair-lt     ( a b c d -> q1 q2 ) { lt     rotr lt     swap }
+fn pair-gt     ( a b c d -> q1 q2 ) { gt     rotr gt     swap }
+fn pair-lte    ( a b c d -> q1 q2 ) { lte    rotr lte    swap }
+fn pair-gte    ( a b c d -> q1 q2 ) { gte    rotr gte    swap }
 
 
 # Internal functions
 # Misc functions
-def inc ( a -> a ) { 1 + }
-def dec ( a -> a ) { 1 - }
-def ++  ( a -> a ) inc
-def --  ( a -> a ) dec
+fn inc ( a -> a ) { 1 + }
+fn dec ( a -> a ) { 1 - }
+fn ++  ( a -> a ) inc
+fn --  ( a -> a ) dec
 
-def min ( a b -> q ) {
-	if { dup2 > } swap
+fn min ( a b -> q ) {
+	if { pair-dup > } swap
 	drop
 }
 
-def max ( a b -> q ) {
-	if { dup2 < } swap
+fn max ( a b -> q ) {
+	if { pair-dup < } swap
 	drop
 }
 
-def neg ( a -> a ) {
+fn neg ( a -> a ) {
 	bnot ++
 }
 
-def abs ( a -> a ) {
+fn abs ( a -> a ) {
 	dup
 	word -- >>
 	swap over
 	^ -
 }
 
-def true  ( -> a ) 1
-def false ( -> a ) 0
+fn true  ( -> a ) 1
+fn false ( -> a ) 0
 
-def true?  ( a -> a ) { false != }
-def false? ( a -> a ) { false =  }
+fn true?  ( a -> a ) { false != }
+fn false? ( a -> a ) { false =  }
 
-def =0?  ( a -> a ) { 0 =  }
-def !=0? ( a -> a ) { 0 != }
-def >0?  ( a -> a ) { 0 >  }
-def <0?  ( a -> a ) { 0 <  }
-def >=0? ( a -> a ) { 0 >= }
-def <=0? ( a -> a ) { 0 <= }
+fn =0?  ( a -> a ) { 0 =  }
+fn !=0? ( a -> a ) { 0 != }
+fn >0?  ( a -> a ) { 0 >  }
+fn <0?  ( a -> a ) { 0 <  }
+fn >=0? ( a -> a ) { 0 >= }
+fn <=0? ( a -> a ) { 0 <= }
 
-def +? ( a -> a ) >0?
-def -? ( a -> a ) <0?
+fn +? ( a -> a ) >0?
+fn -? ( a -> a ) <0?
 
-def pos? ( a -> a ) +?
-def neg? ( a -> a ) -?
+fn pos? ( a -> a ) +?
+fn neg? ( a -> a ) -?
 
-def even? ( a -> a ) { 2 % =0?  }
-def odd?  ( a -> a ) { 2 % 1 = }
+fn even? ( a -> a ) { 2 % =0?  }
+fn odd?  ( a -> a ) { 2 % 1 = }
 
-def both? ( a b -> q ) {
+fn both? ( a b -> q ) {
 	true? swap
 	true? =
 }
 
-def neither? ( a b -> q ) {
+fn neither? ( a b -> q ) {
 	false? swap
 	false? =
 }
 
-def either? ( a b -> q ) {
+fn either? ( a b -> q ) {
 	true? swap
 	true? or
 }
