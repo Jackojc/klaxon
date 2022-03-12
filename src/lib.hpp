@@ -31,9 +31,14 @@ template <typename... Ts>
 using TokenTypes = size_t;
 enum: TokenTypes {
 	TOKENTYPE_SRC = 0b001,
-	TOKENTYPE_IR  = 0b010,
+	TOKENTYPE_AST = 0b010,
+	TOKENTYPE_IR  = 0b100,
 
-	TOKENTYPE_COMMON = TOKENTYPE_SRC | TOKENTYPE_IR,
+	TOKENTYPE_SRC_AST = TOKENTYPE_SRC | TOKENTYPE_AST,
+	TOKENTYPE_AST_IR  = TOKENTYPE_AST | TOKENTYPE_IR,
+	TOKENTYPE_SRC_IR  = TOKENTYPE_SRC | TOKENTYPE_IR,
+
+	TOKENTYPE_COMMON  = TOKENTYPE_SRC | TOKENTYPE_AST | TOKENTYPE_IR,
 };
 
 #define SYMBOL_TYPES \
@@ -43,43 +48,48 @@ enum: TokenTypes {
 	/* Special */ \
 	X(IDENTIFIER, "identifier", TOKENTYPE_COMMON) \
 	X(INTEGER,    "integer",    TOKENTYPE_COMMON) \
+	X(CHARACTER,  "character",  TOKENTYPE_COMMON) \
+	X(STRING,     "string",     TOKENTYPE_COMMON) \
 	\
 	/* Blocks */ \
-	X(DEF,   "def",   TOKENTYPE_COMMON) \
-	X(RET,   "ret",   TOKENTYPE_IR) \
-	X(BLOCK, "block", TOKENTYPE_IR) \
-	X(END,   "end",   TOKENTYPE_IR) \
+	X(PROGRAM, "program", TOKENTYPE_AST) \
+	X(FN,      "fn",      TOKENTYPE_COMMON) \
+	X(RET,     "ret",     TOKENTYPE_IR) \
+	X(BLOCK,   "block",   TOKENTYPE_IR) \
+	X(END,     "end",     TOKENTYPE_AST_IR) \
 	\
 	/* Linkage Specifiers */ \
-	X(DECL,   "decl",   TOKENTYPE_SRC) /* Implicitly Local */ \
-	X(EXTERN, "extern", TOKENTYPE_SRC) /* Implicitly Global */ \
-	X(LOCAL,  "local",  TOKENTYPE_IR) \
-	X(GLOBAL, "global", TOKENTYPE_IR) \
+	X(DECL,   "decl",   TOKENTYPE_COMMON) /* Implicitly Local */ \
+	X(EXTERN, "extern", TOKENTYPE_COMMON) /* Implicitly Global */ \
 	\
 	/* Control Flow */ \
-	X(WHILE,  "while",  TOKENTYPE_SRC) \
-	X(IF,     "if",     TOKENTYPE_SRC) \
+	X(WHILE,  "while",  TOKENTYPE_SRC_AST) \
+	X(IF,     "if",     TOKENTYPE_SRC_AST) \
 	X(ELSE,   "else",   TOKENTYPE_SRC) \
 	X(CALL,   "call",   TOKENTYPE_IR) \
 	X(JUMP,   "jump",   TOKENTYPE_IR) \
 	X(BRANCH, "branch", TOKENTYPE_IR) \
+	X(PHI,    "phi",    TOKENTYPE_IR) \
+	\
+	/* AST */ \
+	X(EXPR, "expr", TOKENTYPE_AST) \
 	\
 	/* Stack Effect Annotation */ \
-	X(EFFECT_SEPERATOR, "->", TOKENTYPE_COMMON) \
-	X(EFFECT_OPEN,      "(",  TOKENTYPE_COMMON) \
-	X(EFFECT_CLOSE,     ")",  TOKENTYPE_COMMON) \
+	X(EFFECT_SEPERATOR, "->", TOKENTYPE_SRC_IR) \
+	X(EFFECT_OPEN,      "(",  TOKENTYPE_SRC_IR) \
+	X(EFFECT_CLOSE,     ")",  TOKENTYPE_SRC_IR) \
 	\
 	/* Block Expression */ \
 	X(BLOCK_OPEN,  "{", TOKENTYPE_SRC) \
 	X(BLOCK_CLOSE, "}", TOKENTYPE_SRC) \
 	\
 	/* Stack/Register Manipulation */ \
-	X(LOAD,   "load",   TOKENTYPE_IR) \
 	X(POP,    "pop",    TOKENTYPE_IR) \
 	X(PUSH,   "push",   TOKENTYPE_IR) \
+	X(LOAD,   "load",   TOKENTYPE_IR) \
 	X(COPY,   "copy",   TOKENTYPE_COMMON) \
-	X(MOVE,   "move",   TOKENTYPE_SRC) \
-	X(REMOVE, "remove", TOKENTYPE_SRC)
+	X(MOVE,   "move",   TOKENTYPE_SRC_AST) \
+	X(REMOVE, "remove", TOKENTYPE_SRC_AST)
 
 	// Enum of symbols
 	#define X(name, str, type) name,
@@ -211,14 +221,8 @@ struct Op {
 	size_t y = 0u;
 	size_t z = 0u;
 
-	constexpr Op(Symbols kind_, size_t x_, size_t y_ = 0u, size_t z_ = 0u):
-		kind(kind_), x(x_), y(y_), z(z_) {}
-
-	constexpr Op(Symbols kind_, View sv_):
-		kind(kind_), sv(sv_) {}
-
-	constexpr Op(Symbols kind_):
-		kind(kind_) {}
+	constexpr Op(Symbols kind_, View sv_, size_t x_ = 0u, size_t y_ = 0u, size_t z_ = 0u):
+		kind(kind_), sv(sv_), x(x_), y(y_), z(z_) {}
 
 	constexpr Op():
 		kind(Symbols::NONE) {}
@@ -233,7 +237,7 @@ struct Effect {
 
 struct Decl {
 	Effect effect;
-	Symbols linkage = Symbols::LOCAL;
+	Symbols linkage = Symbols::DECL;
 
 	constexpr Decl() {}
 	constexpr Decl(Effect effect_, Symbols linkage_):
@@ -241,14 +245,17 @@ struct Decl {
 };
 
 using Declarations = std::unordered_map<View, Decl>;
+using Effects = std::vector<Effect>;
 
 
 template <TokenTypes MODE>
 struct Context: Lexer<MODE> {
 	size_t stack = 0u;
+
 	size_t block_id = 0u;
 	size_t register_id = 0u;
 
+	Effects effects;
 	IR instructions;
 	Declarations decls;
 
@@ -256,28 +263,28 @@ struct Context: Lexer<MODE> {
 		instructions.reserve(instructions.capacity() + src.size());
 	}
 
-	size_t reg_at(size_t i) const {
-		return (register_id - 1) - i;
-	}
+	// size_t reg_at(size_t i) const {
+	// 	return (register_id - 1) - i;
+	// }
 
-	size_t push(size_t n = 1) {
-		stack += n;
-		return stack;
-	}
+	// size_t push(size_t n = 1) {
+	// 	stack += n;
+	// 	return stack;
+	// }
 
-	size_t pop(size_t n = 1) {
-		stack -= n;
-		return stack;
-	}
+	// size_t pop(size_t n = 1) {
+	// 	stack -= n;
+	// 	return stack;
+	// }
 
-	size_t block() { return block_id++; }
-	size_t reg() { return register_id++; }
+	// size_t block() { return block_id++; }
+	// size_t reg() { return register_id++; }
 
-	void reset() {
-		stack = 0u;
-		block_id = 0u;
-		register_id = 0u;
-	}
+	// void reset() {
+	// 	stack = 0u;
+	// 	block_id = 0u;
+	// 	register_id = 0u;
+	// }
 
 	template <typename... Ts> decltype(auto) instruction(Ts&&... args) {
 		return instructions.emplace_back(std::forward<Ts>(args)...);
@@ -314,7 +321,7 @@ constexpr auto src_is_valid = partial_eq_any(
 	Symbols::TERMINATOR,
 	Symbols::IDENTIFIER,
 	Symbols::INTEGER,
-	Symbols::DEF,
+	Symbols::FN,
 	Symbols::DECL,
 	Symbols::EXTERN,
 	Symbols::WHILE,
@@ -333,12 +340,11 @@ constexpr auto src_is_valid = partial_eq_any(
 constexpr auto ir_is_valid = partial_eq_any(
 	Symbols::IDENTIFIER,
 	Symbols::INTEGER,
-	Symbols::DEF,
+	Symbols::FN,
 	Symbols::RET,
 	Symbols::BLOCK,
 	Symbols::END,
 	Symbols::EXTERN,
-	Symbols::LOCAL,
 	Symbols::CALL,
 	Symbols::JUMP,
 	Symbols::BRANCH,
@@ -352,7 +358,12 @@ constexpr auto ir_is_valid = partial_eq_any(
 );
 
 constexpr auto src_is_stmt = partial_eq_any(
-	Symbols::DEF,
+	Symbols::FN,
+	Symbols::DECL,
+	Symbols::EXTERN
+);
+
+constexpr auto src_is_decl = partial_eq_any(
 	Symbols::DECL,
 	Symbols::EXTERN
 );
@@ -368,10 +379,22 @@ constexpr auto src_is_expr = partial_eq_any(
 	Symbols::REMOVE
 );
 
+constexpr auto src_is_intrinsic = partial_eq_any(
+	Symbols::COPY,
+	Symbols::MOVE,
+	Symbols::REMOVE
+);
+
+constexpr auto src_is_literal = partial_eq_any(
+	Symbols::INTEGER,
+	Symbols::CHARACTER,
+	Symbols::STRING
+);
+
 constexpr auto common_is_type_annotation = equal(Symbols::EFFECT_OPEN);
 constexpr auto src_is_block = equal(Symbols::BLOCK_OPEN);
 
-// Is a basic instruction (i.e. not block/def/end/ret)
+// Is a basic instruction (i.e. not block/fn/end/ret)
 constexpr auto ir_is_instruction = partial_eq_any(
 	Symbols::LOAD,
 	Symbols::COPY,
@@ -384,220 +407,158 @@ constexpr auto ir_is_instruction = partial_eq_any(
 
 
 // Parsing
-inline void   src_parse_literal    (SourceContext&);
-inline void   src_parse_call       (SourceContext&);
-inline void   src_parse_while      (SourceContext&);
-inline void   src_parse_if         (SourceContext&);
-inline void   src_parse_block      (SourceContext&);
-inline void   src_parse_expression (SourceContext&);
-inline Effect src_parse_annotation (SourceContext&);
-inline void   src_parse_decl       (SourceContext&);
-inline void   src_parse_def        (SourceContext&);
-inline void   src_parse_statement  (SourceContext&);
-inline void   src_parse            (SourceContext&);
+inline void src_parse_literal    (SourceContext&);
+inline void src_parse_intrinsic  (SourceContext&);
+inline void src_parse_call       (SourceContext&);
+inline void src_parse_while      (SourceContext&);
+inline void src_parse_if         (SourceContext&);
+inline void src_parse_block      (SourceContext&);
+inline void src_parse_expression (SourceContext&);
+inline Decl src_parse_annotation (SourceContext&, View, Symbols);
+inline void src_parse_decl       (SourceContext&);
+inline void src_parse_fn         (SourceContext&);
+inline void src_parse_statement  (SourceContext&);
+inline void src_parse            (SourceContext&);
 
 
 // Expressions
 inline void src_parse_literal(SourceContext& ctx) {
-	size_t num = to_int(ctx.next().view);
-	ctx.instruction(Symbols::LOAD, ctx.reg(), num);
-	ctx.push();
+	ctx.expect_token(src_is_literal, ctx.peek().view, STR_LITERAL);
+	auto [view, kind] = ctx.next();
+
+	switch (kind) {
+		case Symbols::INTEGER: {
+			ctx.instruction(kind, view, to_int(view));
+		} break;
+
+		case Symbols::CHARACTER: {
+
+		} break;
+
+		case Symbols::STRING: {
+
+		} break;
+
+		default: break;
+	}
+}
+
+inline void src_parse_intrinsic(SourceContext& ctx) {
+	ctx.expect_token(src_is_intrinsic, ctx.peek().view, STR_INTRINSIC);
+	Token tok = ctx.next();
+
+	ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_ARG, tok.view);
+	Token arg = ctx.next();
+
+	ctx.instruction(tok.kind, tok.view, to_int(arg.view));
 }
 
 inline void src_parse_call(SourceContext& ctx) {
+	ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_CALL);
 	Token tok = ctx.next();
-	View name = tok.view;
-
-	// Argument intrinsics.
-	if (eq_any(tok.kind,
-		Symbols::COPY,
-		Symbols::MOVE,
-		Symbols::REMOVE
-	)) {
-		ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_ARG, name);
-
-		size_t arg = to_int(ctx.next().view);
-		ctx.expect_effect(more_equal(arg + 1u), name, STR_EFFECT, arg + 1u, ctx.stack);
-
-		switch (tok.kind) {
-			case Symbols::COPY: {
-				ctx.push();
-				ctx.instruction(tok.kind, ctx.reg(), ctx.reg_at(arg));
-			} break;
-
-			case Symbols::REMOVE: {
-				ctx.pop();
-			} break;
-
-			case Symbols::MOVE: {
-
-			} break;
-
-			default: break;
-		}
-
-		// ctx.instruction(tok.kind, arg);
-		return;
-	}
-
-	// Not an intrinsic.
-	auto it = ctx.decls.find(name);
-
-	if (it == ctx.decls.end())
-		ctx.error(Phases::PHASE_SEMANTIC, name, STR_UNDECLARED, name);
-
-	auto [effect, linkage] = it->second;
-
-	// Push arguments to call.
-	for (size_t i = 0; i != effect.in; ++i)
-		ctx.instruction(Symbols::PUSH, ctx.reg_at(i));
-
-	ctx.expect_effect(more_equal(effect.in), name, STR_EFFECT, effect.in, ctx.stack);
-	ctx.instruction(Symbols::CALL, name);
-
-	// Pop return values to registers.
-	for (size_t i = 0; i != effect.out; ++i)
-		ctx.instruction(Symbols::POP, ctx.reg());
-
-	ctx.pop(effect.in);
-	ctx.push(effect.out);
+	ctx.instruction(Symbols::IDENTIFIER, tok.view);
 }
 
 inline void src_parse_while(SourceContext& ctx) {
-	View pos = ctx.next().view;  // skip `while`
+	ctx.expect_token(equal(Symbols::WHILE), ctx.peek().view, STR_WHILE);
+	Token tok = ctx.next();
 
-	size_t header_block = ctx.block();
-	size_t body_block = ctx.block();
-	size_t end_block = ctx.block();
-
-	ctx.instruction(Symbols::JUMP, header_block);
-	ctx.instruction(Symbols::END);
-	ctx.instruction(Symbols::BLOCK, header_block);
+	ctx.instruction(Symbols::WHILE, tok.view);
 
 	// Expression.
-	ctx.expect_token(src_is_expr, ctx.peek().view, STR_EXPR);
+	ctx.instruction(Symbols::EXPR, tok.view);
 	src_parse_expression(ctx);
-
-	// Consume boolean.
-	ctx.expect_effect(more_equal(1u), ctx.peek().view, STR_EFFECT, 1u, ctx.stack);
-	ctx.pop();
-
-	ctx.instruction(Symbols::BRANCH, body_block, end_block);
-	ctx.instruction(Symbols::END);
-	size_t stack_before = ctx.stack;
+	ctx.instruction(Symbols::END, ctx.peek().view);
 
 	// Body.
-	ctx.instruction(Symbols::BLOCK, body_block);
-	ctx.expect_token(src_is_expr, ctx.peek().view, STR_EXPR);
+	ctx.instruction(Symbols::EXPR, ctx.peek().view);
 	src_parse_expression(ctx);
-
-	// Check is stack size has been altered.
-	ctx.expect_effect(equal(stack_before), pos, STR_EFFECT_ALTERED, stack_before, ctx.stack);
-
-	ctx.instruction(Symbols::JUMP, header_block);
-	ctx.instruction(Symbols::END);
-	ctx.instruction(Symbols::BLOCK, end_block);
+	ctx.instruction(Symbols::END, ctx.peek().view);
 }
 
 inline void src_parse_if(SourceContext& ctx) {
-	View pos = ctx.next().view;  // skip `if`
+	ctx.expect_token(equal(Symbols::IF), ctx.peek().view, STR_IF);
+	ctx.next();
 
-	size_t start_block = ctx.block();
-	size_t else_block = ctx.block();
-	size_t end_block = ctx.block();
+	ctx.instruction(Symbols::IF, ctx.peek().view);
 
 	// Expression.
-	ctx.expect_token(src_is_expr, ctx.peek().view, STR_EXPR);
+	ctx.instruction(Symbols::EXPR, ctx.peek().view);
 	src_parse_expression(ctx);
+	ctx.instruction(Symbols::END, ctx.peek().view);
 
-	// Consume boolean.
-	ctx.expect_effect(more_equal(1u), ctx.peek().view, STR_EFFECT, 1u, ctx.stack);
-	ctx.pop();
-
-	// Emit a branch instruction to jump to either the main body,
-	// the else branch or the end of the branch entirely.
-	ctx.instruction(Symbols::BRANCH, start_block, else_block);
-	ctx.instruction(Symbols::END);
-	ctx.instruction(Symbols::BLOCK, start_block);
-
-	// Store the state of the stack before the body of the branch.
-	size_t stack_before = ctx.stack;
-
-	// First block.
-	pos = ctx.peek().view;
-	ctx.expect_token(src_is_expr, pos, STR_EXPR);
+	// True block.
+	ctx.instruction(Symbols::EXPR, ctx.peek().view);
 	src_parse_expression(ctx);
+	ctx.instruction(Symbols::END, ctx.peek().view);
 
-	// Second block.
+	// False block.
+	ctx.instruction(Symbols::EXPR, ctx.peek().view);
+
 	if (ctx.peek().kind == Symbols::ELSE) {
-		// Jump to the end if the true branch is taken so that
-		// we don't fall through to the false branch.
-		ctx.instruction(Symbols::JUMP, end_block);
-
-		size_t stack_body = ctx.stack;  // Store effect of body.
-		ctx.stack = stack_before;   // Restore previous state of stack.
-
-		// Create else block.
-		ctx.instruction(Symbols::END);
-		ctx.instruction(Symbols::BLOCK, else_block);
-		pos = ctx.next().view;  // skip `else`
-
-		ctx.expect_token(src_is_expr, pos, STR_EXPR);
+		ctx.next();
 		src_parse_expression(ctx);
-
-		// Check is stack size has been altered.
-		ctx.expect_effect(equal(stack_body), pos, STR_EFFECT_BRANCH, stack_body, ctx.stack);
-
-		// Create end block.
-		ctx.instruction(Symbols::JUMP, end_block);
-		ctx.instruction(Symbols::END);
-		ctx.instruction(Symbols::BLOCK, end_block);
 	}
 
-	else {
-		// Create end of branch block.
-		ctx.instruction(Symbols::JUMP, else_block);
-		ctx.instruction(Symbols::END);
-		ctx.instruction(Symbols::BLOCK, else_block);
-
-		// Expect that the stack size has not been altered.
-		ctx.expect_effect(equal(stack_before), pos, STR_EFFECT_ALTERED, stack_before, ctx.stack);
-	}
+	ctx.instruction(Symbols::END, ctx.peek().view);
 }
 
 inline void src_parse_block(SourceContext& ctx) {
+	ctx.expect_token(equal(Symbols::BLOCK_OPEN), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::BLOCK_OPEN));
 	ctx.next();  // skip `{`
-	ctx.expect_token(src_is_expr, ctx.peek().view, STR_EXPR);
+
+	ctx.instruction(Symbols::EXPR, ctx.peek().view);
 
 	while (eq_none(ctx.peek().kind, Symbols::BLOCK_CLOSE, Symbols::TERMINATOR))
 		src_parse_expression(ctx);
+
+	ctx.instruction(Symbols::END, ctx.peek().view);
 
 	ctx.expect_token(equal(Symbols::BLOCK_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::BLOCK_CLOSE));
 	ctx.next();  // skip `}`
 }
 
 inline void src_parse_expression(SourceContext& ctx) {
-	switch (ctx.peek().kind) {
-		case Symbols::INTEGER: return src_parse_literal(ctx);
+	ctx.instruction(Symbols::EXPR, ctx.peek().view);
 
-		case Symbols::IDENTIFIER:
+	switch (ctx.peek().kind) {
+		case Symbols::INTEGER: {
+			src_parse_literal(ctx);
+		} break;
+
+		case Symbols::IDENTIFIER: {
+			src_parse_call(ctx);
+		} break;
+
 		case Symbols::COPY:
 		case Symbols::MOVE:
-		case Symbols::REMOVE:
-			return src_parse_call(ctx);
+		case Symbols::REMOVE: {
+			src_parse_intrinsic(ctx);
+		} break;
 
-		case Symbols::WHILE:      return src_parse_while(ctx);
-		case Symbols::IF:         return src_parse_if(ctx);
-		case Symbols::BLOCK_OPEN: return src_parse_block(ctx);
+		case Symbols::WHILE: {
+			src_parse_while(ctx);
+		} break;
+
+		case Symbols::IF: {
+			src_parse_if(ctx);
+		} break;
+
+		case Symbols::BLOCK_OPEN: {
+			src_parse_block(ctx);
+		} break;
 
 		default:
 			ctx.error(Phases::PHASE_SYNTACTIC, ctx.peek().view, STR_EXPR);
 	}
+
+	ctx.instruction(Symbols::END, ctx.peek().view);
 }
 
 
 // Statements
-inline Effect src_parse_annotation(SourceContext& ctx) {
+inline Decl src_parse_annotation(SourceContext& ctx, View name, Symbols linkage) {
+	ctx.expect_token(common_is_type_annotation, ctx.peek().view, STR_ANNOTATION);
 	ctx.next();  // skip `(`
 
 	size_t in = 0u;
@@ -610,7 +571,7 @@ inline Effect src_parse_annotation(SourceContext& ctx) {
 	}
 
 	ctx.expect_token(equal(Symbols::EFFECT_SEPERATOR), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_SEPERATOR));
-	ctx.next();  // skip `)`
+	ctx.next();  // skip `->`
 
 	while (ctx.peek().kind != Symbols::EFFECT_CLOSE) {
 		ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
@@ -621,48 +582,42 @@ inline Effect src_parse_annotation(SourceContext& ctx) {
 	ctx.expect_token(equal(Symbols::EFFECT_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_CLOSE));
 	ctx.next();  // skip `)`
 
-	return { in, out };
+	// Store type signature.
+	auto [it, succ] = ctx.decl(name, Effect { in, out }, linkage);
+
+	if (not succ)
+		ctx.error(Phases::PHASE_SEMANTIC, name, STR_MULTIPLE_DECLARED, name);
+
+	ctx.instruction(linkage, name, in, out);
+
+	return it->second;
 }
 
 inline void src_parse_decl(SourceContext& ctx) {
-	Symbols kind = ctx.next().kind;  // skip `internal`/`external`
+	ctx.expect_token(src_is_decl, ctx.peek().view, STR_DECL);
+	Symbols linkage = ctx.peek().kind;
+	ctx.next();
 
 	ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
-	View name = ctx.next().view;
+	View name = ctx.peek().view;
+	ctx.next();
 
-	ctx.expect_token(common_is_type_annotation, ctx.peek().view, STR_ANNOTATION);
-	Effect se = src_parse_annotation(ctx);
-
-	if (kind == Symbols::DECL)
-		kind = Symbols::LOCAL;
-
-	else if (kind == Symbols::EXTERN)
-		kind = Symbols::GLOBAL;
-
-	// Store type signature.
-	if (auto [it, succ] = ctx.decl(name, se, kind); not succ)
-		ctx.error(Phases::PHASE_SEMANTIC, name, STR_MULTIPLE_DECLARED, name);
+	src_parse_annotation(ctx, name, linkage);
 }
 
-inline void src_parse_def(SourceContext& ctx) {
-	ctx.reset();
-	ctx.next();  // skip `def`
+inline void src_parse_fn(SourceContext& ctx) {
+	ctx.expect_token(equal(Symbols::FN), ctx.peek().view, STR_FN);
+	ctx.next();  // skip `fn`
 
 	ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
-	View name = ctx.next().view;
+	View name = ctx.peek().view;
+	ctx.next();
 
 	Decl decl;
 
 	// Inline declaration.
-	if (common_is_type_annotation(ctx.peek().kind)) {
-		Effect se = src_parse_annotation(ctx);
-
-		if (auto [it, succ] = ctx.decl(name, se, Symbols::LOCAL); not succ)
-			ctx.error(Phases::PHASE_SEMANTIC, name, STR_MULTIPLE_DECLARED, name);
-
-		else
-			decl = it->second;
-	}
+	if (common_is_type_annotation(ctx.peek().kind))
+		decl = src_parse_annotation(ctx, name, Symbols::DECL);
 
 	// Split declaration.
 	else {
@@ -676,26 +631,10 @@ inline void src_parse_def(SourceContext& ctx) {
 
 	auto [effect, linkage] = decl;
 
-	ctx.instruction(Symbols::DEF, name);
-	ctx.instruction(Symbols::BLOCK, ctx.block());
+	ctx.instruction(Symbols::FN, name);
 
-	// Pop arguments to function into registers.
-	for (size_t i = 0; i != effect.in; ++i)
-		ctx.instruction(Symbols::POP, ctx.reg());
-
-	ctx.stack = effect.in;
-
-	ctx.expect_token(src_is_expr, ctx.peek().view, STR_EXPR);
+	// Body.
 	src_parse_expression(ctx);
-
-	ctx.expect_effect(equal(effect.out), name, STR_EFFECT_RETURN, effect.out, ctx.stack);
-
-	// Push return values to stack.
-	for (size_t i = 0; i != effect.out; ++i)
-		ctx.instruction(Symbols::PUSH, ctx.reg_at(i));
-
-	ctx.instruction(Symbols::END);
-	ctx.instruction(Symbols::RET);
 }
 
 inline void src_parse_statement(SourceContext& ctx) {
@@ -704,8 +643,8 @@ inline void src_parse_statement(SourceContext& ctx) {
 		case Symbols::EXTERN:
 			return src_parse_decl(ctx);
 
-		case Symbols::DEF:
-			return src_parse_def(ctx);
+		case Symbols::FN:
+			return src_parse_fn(ctx);
 
 		default:
 			ctx.error(Phases::PHASE_SYNTACTIC, ctx.peek().view, STR_STMT);
@@ -713,78 +652,12 @@ inline void src_parse_statement(SourceContext& ctx) {
 }
 
 inline void src_parse(SourceContext& ctx) {
-	ctx.expect_token(src_is_stmt, ctx.peek().view, STR_STMT);
+	ctx.instruction(Symbols::PROGRAM, ctx.peek().view);
 
 	while (ctx.peek().kind != Symbols::TERMINATOR)
 		src_parse_statement(ctx);
-}
 
-}
-
-
-// IR serialisation
-namespace klx {
-
-template <TokenTypes MODE>
-inline void serialise_ir(std::ostream& os, const Context<MODE>& ctx) {
-	// Declarations.
-	for (auto [name, value]: ctx.decls) {
-		auto [effect, linkage] = value;
-		outlnfmt(os, "{} {} ( {} -> {} )", symbol_to_string(linkage), name, effect.in, effect.out);
-	}
-
-	// Code.
-	for (auto [kind, sv, x, y, z]: ctx.instructions) {
-		if (not ir_is_valid(kind))
-			ctx.error(Phases::PHASE_INTERMEDIATE, ""_sv, STR_UNKNOWN_IR, symbol_to_string(kind));
-
-		if (kind == Symbols::NONE)
-			continue;
-
-		// Indentation.
-		switch (kind) {
-			case Symbols::DEF:
-			case Symbols::RET: break;
-
-			case Symbols::BLOCK:
-			case Symbols::END: {
-				out(os, " ");
-			} break;
-
-			default: {
-				out(os, "  ");
-			} break;
-		}
-
-		// Instructions.
-		out(os, symbol_to_string(kind));
-
-		switch (kind) {
-			case Symbols::PUSH:
-			case Symbols::POP:
-			case Symbols::JUMP:
-			case Symbols::BLOCK: {
-				out(os, " ", x);
-			} break;
-
-			case Symbols::CALL:
-			case Symbols::DEF: {
-				out(os, " ", sv);
-			} break;
-
-			case Symbols::LOAD:
-			case Symbols::COPY:
-			case Symbols::BRANCH: {
-				out(os, " ", x, " ", y);
-			} break;
-
-			case Symbols::END:
-			case Symbols::RET:
-			default: break;
-		}
-
-		out(os, '\n');
-	}
+	ctx.instruction(Symbols::END, ctx.peek().view);
 }
 
 }
