@@ -17,17 +17,21 @@ inline IR::iterator ast_effect(Context<MODE>& ctx, IR::iterator it, IR::iterator
 		} break;
 
 		case Symbols::FN: {
+			ctx.stack = 0u;
+			ctx.max_stack = 0u;
+
 			auto decl_it = ctx.decls.find(current->sv);
 
 			if (decl_it == ctx.decls.end())
 				ctx.error(Phases::PHASE_EFFECT_CHECK, current->sv, STR_UNDECLARED, current->sv);
 
 			auto [effect, linkage] = decl_it->second;
-			ctx.stack = effect.in;
+			ctx.stack_set(effect.in);
 
 			it = ast_effect(ctx, it + 1, end);
-
 			ctx.expect_effect(equal(effect.out), current->sv, STR_EFFECT_RETURN, effect.out, ctx.stack);
+
+			ctx.alloc(current->sv, ctx.max_stack);  // Store maximum size of stack.
 		} break;
 
 		case Symbols::PROGRAM: {
@@ -42,13 +46,13 @@ inline IR::iterator ast_effect(Context<MODE>& ctx, IR::iterator it, IR::iterator
 		// Expressions.
 		case Symbols::COPY: {
 			ctx.expect_effect(more_equal(current->x + 1), current->sv, STR_EFFECT, current->x + 1, ctx.stack);
-			ctx.stack++;
+			ctx.stack_push(1);
 			it++;
 		} break;
 
 		case Symbols::REMOVE: {
 			ctx.expect_effect(more_equal(current->x + 1), current->sv, STR_EFFECT, current->x + 1, ctx.stack);
-			ctx.stack--;
+			ctx.stack_pop(1);
 			it++;
 		} break;
 
@@ -58,7 +62,7 @@ inline IR::iterator ast_effect(Context<MODE>& ctx, IR::iterator it, IR::iterator
 		} break;
 
 		case Symbols::INTEGER: {
-			ctx.stack++;
+			ctx.stack_push(1);
 			it++;
 		} break;
 
@@ -72,8 +76,8 @@ inline IR::iterator ast_effect(Context<MODE>& ctx, IR::iterator it, IR::iterator
 
 			ctx.expect_effect(more_equal(effect.in), current->sv, STR_EFFECT, effect.in, ctx.stack);
 
-			ctx.stack -= effect.in;
-			ctx.stack += effect.out;
+			ctx.stack_pop(effect.in);
+			ctx.stack_push(effect.out);
 
 			it++;
 		} break;
@@ -91,7 +95,7 @@ inline IR::iterator ast_effect(Context<MODE>& ctx, IR::iterator it, IR::iterator
 			it = ast_effect(ctx, it + 1, end);  // Test
 
 			ctx.expect_effect(more_equal(1u), it->sv, STR_EFFECT, 1u, ctx.stack);
-			ctx.stack--;
+			ctx.stack_pop(1);
 
 			size_t initial = ctx.stack;
 
@@ -103,14 +107,14 @@ inline IR::iterator ast_effect(Context<MODE>& ctx, IR::iterator it, IR::iterator
 			it = ast_effect(ctx, it + 1, end);  // Test
 
 			ctx.expect_effect(more_equal(1u), current->sv, STR_EFFECT, 1u, ctx.stack);
-			ctx.stack--;
+			ctx.stack_pop(1);
 
-			size_t initial = ctx.stack;    // Store size before branches.
+			size_t initial = ctx.stack;     // Store size before branches.
 
 			it = ast_effect(ctx, it, end);  // True
-			size_t first = ctx.stack;      // Store effect of true branch.
+			size_t first = ctx.stack;       // Store effect of true branch.
 
-			ctx.stack = initial;           // Restore stack to initial state.
+			ctx.stack_set(initial);          // Restore stack to initial state.
 			it = ast_effect(ctx, it, end);  // False
 			size_t second = ctx.stack;
 

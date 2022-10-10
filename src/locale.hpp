@@ -6,6 +6,7 @@
 namespace klx {
 
 	constexpr View STR_UNDECLARED        = "undeclared function '{}'"_sv;
+	constexpr View STR_RESERVE           = "no stack frame reservation for '{}'"_sv;
 	constexpr View STR_MULTIPLE_DECLARED = "multiple declarations of '{}'"_sv;
 	constexpr View STR_MULTIPLE_DEFINED  = "multiple definitions of '{}'"_sv;
 

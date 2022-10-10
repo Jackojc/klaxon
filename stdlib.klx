@@ -1,66 +1,66 @@
 # Internal functions
 # Stack operations
-fn dup ( a -> a a )
+dup ( a -> a a )
 	copy 0
 
-fn over ( a b -> a b a )
+over ( a b -> a b a )
 	copy 1
 
-fn swap ( a b -> b a )
+swap ( a b -> b a )
 	move 1
 
-fn drop ( a -> )
+drop ( a -> )
 	remove 0
 
-fn nip ( a b -> b )
+nip ( a b -> b )
 	remove 1
 
-fn rotl ( a b c -> b c a )
+rotl ( a b c -> b c a )
 	move 2
 
-fn rotr ( a b c -> c a b ) {
+rotr ( a b c -> c a b ) {
 	rotl rotl
 }
 
-fn tuck ( a b -> b a b ) {
+tuck ( a b -> b a b ) {
 	over over
 	remove 3
 }
 
 
 # Two element variants of stack operations
-fn pair-dup ( a b -> a b a b ) {
+pair-dup ( a b -> a b a b ) {
 	over over
 }
 
-fn pair-over ( a b c d -> a b c d a b ) {
+pair-over ( a b c d -> a b c d a b ) {
 	copy 3
 	copy 3
 }
 
-fn pair-swap ( a b c d -> c d a b ) {
+pair-swap ( a b c d -> c d a b ) {
 	move 3
 	move 3
 }
 
-fn pair-drop ( a b -> ) {
+pair-drop ( a b -> ) {
 	drop drop
 }
 
-fn pair-nip ( a b c -> c ) {
+pair-nip ( a b c -> c ) {
 	nip nip
 }
 
-fn pair-rotl ( a b c d e f -> c d e f a b ) {
+pair-rotl ( a b c d e f -> c d e f a b ) {
 	move 5
 	move 5
 }
 
-fn pair-rotr ( a b c d e f -> e f a b c d ) {
+pair-rotr ( a b c d e f -> e f a b c d ) {
 	pair-rotl pair-rotl
 }
 
-fn pair-tuck ( a b c d -> c d a b c d ) {
+pair-tuck ( a b c d -> c d a b c d ) {
 	pair-swap pair-over
 }
 
@@ -90,7 +90,7 @@ extern bnot ( a -> a )
 
 # Comparisons
 extern eq ( a b -> q )
-fn not-eq ( a b -> q ) { eq not }
+not-eq ( a b -> q ) { eq not }
 extern lt ( a b -> q )
 extern gt ( a b -> q )
 extern lte ( a b -> q )
@@ -101,116 +101,116 @@ extern word ( -> a ) # Get word size of current platform
 
 
 # Aliases
-fn + ( a b -> q ) add
-fn - ( a b -> q ) sub
-fn * ( a b -> q ) mul
-fn / ( a b -> q ) div
-fn % ( a b -> q ) mod
++ ( a b -> q ) add
+- ( a b -> q ) sub
+* ( a b -> q ) mul
+/ ( a b -> q ) div
+% ( a b -> q ) mod
 
-fn << ( a b -> q ) lsh
-fn >> ( a b -> q ) rsh
+<< ( a b -> q ) lsh
+>> ( a b -> q ) rsh
 
-fn && ( a b -> q ) and
-fn || ( a b -> q ) or
-fn ^^ ( a b -> q ) xor
-fn !  ( a -> a )   not
+&& ( a b -> q ) and
+|| ( a b -> q ) or
+^^ ( a b -> q ) xor
+!  ( a -> a )   not
 
-fn & ( a b -> q ) band
-fn | ( a b -> q ) bor
-fn ^ ( a b -> q ) bxor
-fn ~ ( a -> a )   bnot
+& ( a b -> q ) band
+| ( a b -> q ) bor
+^ ( a b -> q ) bxor
+~ ( a -> a )   bnot
 
-fn =  ( a b -> q ) eq
-fn != ( a b -> q ) not-eq
-fn <  ( a b -> q ) lt
-fn >  ( a b -> q ) gt
-fn <= ( a b -> q ) lte
-fn >= ( a b -> q ) gte
+=  ( a b -> q ) eq
+!= ( a b -> q ) not-eq
+<  ( a b -> q ) lt
+>  ( a b -> q ) gt
+<= ( a b -> q ) lte
+>= ( a b -> q ) gte
 
 # Two element variants
-fn pair-add ( a b c d -> q1 q2 ) { + rotr + swap }
-fn pair-sub ( a b c d -> q1 q2 ) { - rotr - swap }
-fn pair-mul ( a b c d -> q1 q2 ) { * rotr * swap }
-fn pair-div ( a b c d -> q1 q2 ) { / rotr / swap }
-fn pair-mod ( a b c d -> q1 q2 ) { % rotr % swap }
+pair-add ( a b c d -> q1 q2 ) { + rotr + swap }
+pair-sub ( a b c d -> q1 q2 ) { - rotr - swap }
+pair-mul ( a b c d -> q1 q2 ) { * rotr * swap }
+pair-div ( a b c d -> q1 q2 ) { / rotr / swap }
+pair-mod ( a b c d -> q1 q2 ) { % rotr % swap }
 
-fn pair-lsh ( a b c d -> q1 q2 ) { << rotr << swap }
-fn pair-rsh ( a b c d -> q1 q2 ) { >> rotr >> swap }
+pair-lsh ( a b c d -> q1 q2 ) { << rotr << swap }
+pair-rsh ( a b c d -> q1 q2 ) { >> rotr >> swap }
 
-fn pair-and ( a b c d -> q1 q2 ) { && rotr && swap }
-fn pair-or  ( a b c d -> q1 q2 ) { || rotr || swap }
-fn pair-xor ( a b c d -> q1 q2 ) { ^^ rotr ^^ swap }
-fn pair-not ( a b -> q1 q2 )     { !  swap !  swap }
+pair-and ( a b c d -> q1 q2 ) { && rotr && swap }
+pair-or  ( a b c d -> q1 q2 ) { || rotr || swap }
+pair-xor ( a b c d -> q1 q2 ) { ^^ rotr ^^ swap }
+pair-not ( a b -> q1 q2 )     { !  swap !  swap }
 
-fn pair-eq     ( a b c d -> q1 q2 ) { eq     rotr eq     swap }
-fn pair-not-eq ( a b c d -> q1 q2 ) { not-eq rotr not-eq swap }
-fn pair-lt     ( a b c d -> q1 q2 ) { lt     rotr lt     swap }
-fn pair-gt     ( a b c d -> q1 q2 ) { gt     rotr gt     swap }
-fn pair-lte    ( a b c d -> q1 q2 ) { lte    rotr lte    swap }
-fn pair-gte    ( a b c d -> q1 q2 ) { gte    rotr gte    swap }
+pair-eq     ( a b c d -> q1 q2 ) { eq     rotr eq     swap }
+pair-not-eq ( a b c d -> q1 q2 ) { not-eq rotr not-eq swap }
+pair-lt     ( a b c d -> q1 q2 ) { lt     rotr lt     swap }
+pair-gt     ( a b c d -> q1 q2 ) { gt     rotr gt     swap }
+pair-lte    ( a b c d -> q1 q2 ) { lte    rotr lte    swap }
+pair-gte    ( a b c d -> q1 q2 ) { gte    rotr gte    swap }
 
 
 # Internal functions
 # Misc functions
-fn inc ( a -> a ) { 1 + }
-fn dec ( a -> a ) { 1 - }
-fn ++  ( a -> a ) inc
-fn --  ( a -> a ) dec
+inc ( a -> a ) { 1 + }
+dec ( a -> a ) { 1 - }
+++  ( a -> a ) inc
+--  ( a -> a ) dec
 
-fn min ( a b -> q ) {
+min ( a b -> q ) {
 	if { pair-dup > } swap
 	drop
 }
 
-fn max ( a b -> q ) {
+max ( a b -> q ) {
 	if { pair-dup < } swap
 	drop
 }
 
-fn neg ( a -> a ) {
+neg ( a -> a ) {
 	bnot ++
 }
 
-fn abs ( a -> a ) {
+abs ( a -> a ) {
 	dup
 	word -- >>
 	swap over
 	^ -
 }
 
-fn true  ( -> a ) 1
-fn false ( -> a ) 0
+true  ( -> a ) 1
+false ( -> a ) 0
 
-fn true?  ( a -> a ) { false != }
-fn false? ( a -> a ) { false =  }
+true?  ( a -> a ) { false != }
+false? ( a -> a ) { false =  }
 
-fn =0?  ( a -> a ) { 0 =  }
-fn !=0? ( a -> a ) { 0 != }
-fn >0?  ( a -> a ) { 0 >  }
-fn <0?  ( a -> a ) { 0 <  }
-fn >=0? ( a -> a ) { 0 >= }
-fn <=0? ( a -> a ) { 0 <= }
+=0?  ( a -> a ) { 0 =  }
+!=0? ( a -> a ) { 0 != }
+>0?  ( a -> a ) { 0 >  }
+<0?  ( a -> a ) { 0 <  }
+>=0? ( a -> a ) { 0 >= }
+<=0? ( a -> a ) { 0 <= }
 
-fn +? ( a -> a ) >0?
-fn -? ( a -> a ) <0?
++? ( a -> a ) >0?
+-? ( a -> a ) <0?
 
-fn pos? ( a -> a ) +?
-fn neg? ( a -> a ) -?
+pos? ( a -> a ) +?
+neg? ( a -> a ) -?
 
-fn even? ( a -> a ) { 2 % =0?  }
-fn odd?  ( a -> a ) { 2 % 1 = }
+even? ( a -> a ) { 2 % =0?  }
+odd?  ( a -> a ) { 2 % 1 = }
 
-fn both? ( a b -> q ) {
+both? ( a b -> q ) {
 	true? swap
 	true? =
 }
 
-fn neither? ( a b -> q ) {
+neither? ( a b -> q ) {
 	false? swap
 	false? =
 }
 
-fn either? ( a b -> q ) {
+either? ( a b -> q ) {
 	true? swap
 	true? or
 }

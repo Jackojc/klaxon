@@ -53,9 +53,9 @@ enum: TokenTypes {
 	\
 	/* Blocks */ \
 	X(PROGRAM, "program", TOKENTYPE_AST) \
-	X(FN,      "fn",      TOKENTYPE_COMMON) \
-	X(RET,     "ret",     TOKENTYPE_IR) \
 	X(BLOCK,   "block",   TOKENTYPE_IR) \
+	X(RET,     "ret",     TOKENTYPE_IR) \
+	X(FN,      "fn",      TOKENTYPE_AST_IR) \
 	X(END,     "end",     TOKENTYPE_AST_IR) \
 	\
 	/* Linkage Specifiers */ \
@@ -84,12 +84,12 @@ enum: TokenTypes {
 	X(BLOCK_CLOSE, "}", TOKENTYPE_SRC) \
 	\
 	/* Stack/Register Manipulation */ \
-	X(POP,    "pop",    TOKENTYPE_IR) \
-	X(PUSH,   "push",   TOKENTYPE_IR) \
-	X(LOAD,   "load",   TOKENTYPE_IR) \
-	X(COPY,   "copy",   TOKENTYPE_COMMON) \
-	X(MOVE,   "move",   TOKENTYPE_SRC_AST) \
-	X(REMOVE, "remove", TOKENTYPE_SRC_AST)
+	X(POP,     "pop",     TOKENTYPE_IR) \
+	X(PUSH,    "push",    TOKENTYPE_IR) \
+	X(LET,     "let",     TOKENTYPE_IR) \
+	X(COPY,    "copy",    TOKENTYPE_COMMON) \
+	X(MOVE,    "move",    TOKENTYPE_SRC_AST) \
+	X(REMOVE,  "remove",  TOKENTYPE_SRC_AST)
 
 	// Enum of symbols
 	#define X(name, str, type) name,
@@ -128,7 +128,7 @@ struct Token {
 };
 
 
-template <TokenTypes MODE>
+template <TokenTypes MODE = TOKENTYPE_SRC>
 struct Lexer {
 	klx::View original {};
 	klx::View src {};
@@ -136,7 +136,18 @@ struct Lexer {
 	klx::Token peek_ {};
 
 	constexpr Lexer(klx::View src_): original(src_), src(src_) {
-		next();
+		next();  // this can throw
+	}
+
+	template <typename F, typename... Ts>
+	void expect(const F& fn, View sv, Ts&&... args) {
+		if (not fn(peek().kind))
+			halt(Phases::PHASE_SYNTACTIC, original, sv, std::forward<Ts>(args)...);
+	}
+
+	template <typename... Ts>
+	void error(Phases phase, View sv, Ts&&... args) {
+		halt(phase, original, sv, std::forward<Ts>(args)...);
 	}
 
 	inline Token peek() const {
@@ -208,6 +219,7 @@ struct Lexer {
 	}
 };
 
+
 using IntermediateLexer = Lexer<TOKENTYPE_IR>;
 using SourceLexer       = Lexer<TOKENTYPE_SRC>;
 
@@ -230,145 +242,47 @@ struct Op {
 
 using IR = std::vector<Op>;
 
+
 struct Effect {
-	size_t in = 0u;
-	size_t out = 0u;
+	size_t in;
+	size_t out;
+
+	constexpr Effect(size_t in_ = 0u, size_t out_ = 0u):
+		in(in_), out(out_) {}
 };
 
-struct Decl {
-	Effect effect;
-	Symbols linkage = Symbols::DECL;
-
-	constexpr Decl() {}
-	constexpr Decl(Effect effect_, Symbols linkage_):
-		effect(effect_), linkage(linkage_) {}
-};
-
-using Declarations = std::unordered_map<View, Decl>;
-using Effects = std::vector<Effect>;
+using Decls = std::unordered_map<View, Effect>;
 
 
-template <TokenTypes MODE>
-struct Context: Lexer<MODE> {
-	size_t stack = 0u;
-
-	size_t block_id = 0u;
-	size_t register_id = 0u;
-
-	Effects effects;
-	IR instructions;
-	Declarations decls;
-
-	inline Context(klx::View src): Lexer<MODE>::Lexer(src) {
-		instructions.reserve(instructions.capacity() + src.size());
-	}
-
-	// size_t reg_at(size_t i) const {
-	// 	return (register_id - 1) - i;
-	// }
-
-	// size_t push(size_t n = 1) {
-	// 	stack += n;
-	// 	return stack;
-	// }
-
-	// size_t pop(size_t n = 1) {
-	// 	stack -= n;
-	// 	return stack;
-	// }
-
-	// size_t block() { return block_id++; }
-	// size_t reg() { return register_id++; }
-
-	// void reset() {
-	// 	stack = 0u;
-	// 	block_id = 0u;
-	// 	register_id = 0u;
-	// }
+struct Context: public IR {
+	Decls decls;
 
 	template <typename... Ts> decltype(auto) instruction(Ts&&... args) {
-		return instructions.emplace_back(std::forward<Ts>(args)...);
+		return this->emplace_back(std::forward<Ts>(args)...);
+	}
+
+	template <typename... Ts> decltype(auto) node(Ts&&... args) {
+		return instruction(std::forward<Ts>(args)...);
 	}
 
 	template <typename... Ts> decltype(auto) decl(Ts&&... args) {
 		return decls.try_emplace(std::forward<Ts>(args)...);
 	}
-
-	template <typename F, typename... Ts>
-	void expect_token(const F& fn, View sv, Ts&&... args) const {
-		if (not fn(Lexer<MODE>::peek().kind))
-			halt(Phases::PHASE_SYNTACTIC, Lexer<MODE>::original, sv, std::forward<Ts>(args)...);
-	}
-
-	template <typename F, typename... Ts>
-	void expect_effect(const F& fn, View sv, Ts&&... args) const {
-		if (not fn(stack))
-			halt(Phases::PHASE_SEMANTIC, Lexer<MODE>::original, sv, std::forward<Ts>(args)...);
-	}
-
-	template <typename... Ts>
-	void error(Phases phase, View sv, Ts&&... args) const {
-		halt(phase, Lexer<MODE>::original, sv, std::forward<Ts>(args)...);
-	}
 };
 
-using SourceContext       = Context<TOKENTYPE_SRC>;
-using IntermediateContext = Context<TOKENTYPE_IR>;
 
-
-// Predicates.
-constexpr auto src_is_valid = partial_eq_any(
-	Symbols::TERMINATOR,
+constexpr auto is_stmt = partial_eq_any(
 	Symbols::IDENTIFIER,
-	Symbols::INTEGER,
-	Symbols::FN,
-	Symbols::DECL,
-	Symbols::EXTERN,
-	Symbols::WHILE,
-	Symbols::IF,
-	Symbols::ELSE,
-	Symbols::EFFECT_SEPERATOR,
-	Symbols::EFFECT_OPEN,
-	Symbols::EFFECT_CLOSE,
-	Symbols::BLOCK_OPEN,
-	Symbols::BLOCK_CLOSE,
-	Symbols::COPY,
-	Symbols::MOVE,
-	Symbols::REMOVE
-);
-
-constexpr auto ir_is_valid = partial_eq_any(
-	Symbols::IDENTIFIER,
-	Symbols::INTEGER,
-	Symbols::FN,
-	Symbols::RET,
-	Symbols::BLOCK,
-	Symbols::END,
-	Symbols::EXTERN,
-	Symbols::CALL,
-	Symbols::JUMP,
-	Symbols::BRANCH,
-	Symbols::EFFECT_SEPERATOR,
-	Symbols::EFFECT_OPEN,
-	Symbols::EFFECT_CLOSE,
-	Symbols::LOAD,
-	Symbols::POP,
-	Symbols::PUSH,
-	Symbols::COPY
-);
-
-constexpr auto src_is_stmt = partial_eq_any(
-	Symbols::FN,
 	Symbols::DECL,
 	Symbols::EXTERN
 );
 
-constexpr auto src_is_decl = partial_eq_any(
+constexpr auto is_decl = partial_eq_any(
 	Symbols::DECL,
 	Symbols::EXTERN
 );
 
-constexpr auto src_is_expr = partial_eq_any(
+constexpr auto is_expr = partial_eq_any(
 	Symbols::INTEGER,
 	Symbols::IDENTIFIER,
 	Symbols::WHILE,
@@ -379,56 +293,45 @@ constexpr auto src_is_expr = partial_eq_any(
 	Symbols::REMOVE
 );
 
-constexpr auto src_is_intrinsic = partial_eq_any(
+constexpr auto is_intrinsic = partial_eq_any(
 	Symbols::COPY,
 	Symbols::MOVE,
 	Symbols::REMOVE
 );
 
-constexpr auto src_is_literal = partial_eq_any(
+constexpr auto is_literal = partial_eq_any(
 	Symbols::INTEGER,
 	Symbols::CHARACTER,
 	Symbols::STRING
 );
 
-constexpr auto common_is_type_annotation = equal(Symbols::EFFECT_OPEN);
-constexpr auto src_is_block = equal(Symbols::BLOCK_OPEN);
-
-// Is a basic instruction (i.e. not block/fn/end/ret)
-constexpr auto ir_is_instruction = partial_eq_any(
-	Symbols::LOAD,
-	Symbols::COPY,
-	Symbols::PUSH,
-	Symbols::POP,
-	Symbols::CALL,
-	Symbols::JUMP,
-	Symbols::BRANCH
-);
+constexpr auto is_annotation = equal(Symbols::EFFECT_OPEN);
+constexpr auto is_block = equal(Symbols::BLOCK_OPEN);
 
 
 // Parsing
-inline void src_parse_literal    (SourceContext&);
-inline void src_parse_intrinsic  (SourceContext&);
-inline void src_parse_call       (SourceContext&);
-inline void src_parse_while      (SourceContext&);
-inline void src_parse_if         (SourceContext&);
-inline void src_parse_block      (SourceContext&);
-inline void src_parse_expression (SourceContext&);
-inline Decl src_parse_annotation (SourceContext&, View, Symbols);
-inline void src_parse_decl       (SourceContext&);
-inline void src_parse_fn         (SourceContext&);
-inline void src_parse_statement  (SourceContext&);
-inline void src_parse            (SourceContext&);
+inline void parse_literal    (Context&, SourceLexer&);
+inline void parse_intrinsic  (Context&, SourceLexer&);
+inline void parse_call       (Context&, SourceLexer&);
+inline void parse_while      (Context&, SourceLexer&);
+inline void parse_if         (Context&, SourceLexer&);
+inline void parse_block      (Context&, SourceLexer&);
+inline void parse_expression (Context&, SourceLexer&);
+inline void parse_annotation (Context&, SourceLexer&, View, Symbols);
+inline void parse_decl       (Context&, SourceLexer&);
+inline void parse_fn         (Context&, SourceLexer&);
+inline void parse_statement  (Context&, SourceLexer&);
+inline Context  parse            (SourceLexer&);
 
 
 // Expressions
-inline void src_parse_literal(SourceContext& ctx) {
-	ctx.expect_token(src_is_literal, ctx.peek().view, STR_LITERAL);
-	auto [view, kind] = ctx.next();
+inline void parse_literal(Context& ast, SourceLexer& lexer) {
+	lexer.expect(is_literal, lexer.peek().view, STR_LITERAL);
+	auto [view, kind] = lexer.next();
 
 	switch (kind) {
 		case Symbols::INTEGER: {
-			ctx.instruction(kind, view, to_int(view));
+			ast.node(kind, view, to_int(view));
 		} break;
 
 		case Symbols::CHARACTER: {
@@ -443,221 +346,198 @@ inline void src_parse_literal(SourceContext& ctx) {
 	}
 }
 
-inline void src_parse_intrinsic(SourceContext& ctx) {
-	ctx.expect_token(src_is_intrinsic, ctx.peek().view, STR_INTRINSIC);
-	Token tok = ctx.next();
+inline void parse_intrinsic(Context& ast, SourceLexer& lexer) {
+	lexer.expect(is_intrinsic, lexer.peek().view, STR_INTRINSIC);
+	Token tok = lexer.next();
 
-	ctx.expect_token(equal(Symbols::INTEGER), ctx.peek().view, STR_ARG, tok.view);
-	Token arg = ctx.next();
+	lexer.expect(equal(Symbols::INTEGER), lexer.peek().view, STR_ARG, tok.view);
+	Token arg = lexer.next();
 
-	ctx.instruction(tok.kind, tok.view, to_int(arg.view));
+	ast.node(tok.kind, tok.view, to_int(arg.view));
 }
 
-inline void src_parse_call(SourceContext& ctx) {
-	ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_CALL);
-	Token tok = ctx.next();
-	ctx.instruction(Symbols::IDENTIFIER, tok.view);
+inline void parse_call(Context& ast, SourceLexer& lexer) {
+	lexer.expect(equal(Symbols::IDENTIFIER), lexer.peek().view, STR_CALL);
+	Token tok = lexer.next();
+	ast.node(Symbols::IDENTIFIER, tok.view);
 }
 
-inline void src_parse_while(SourceContext& ctx) {
-	ctx.expect_token(equal(Symbols::WHILE), ctx.peek().view, STR_WHILE);
-	Token tok = ctx.next();
+inline void parse_while(Context& ast, SourceLexer& lexer) {
+	lexer.expect(equal(Symbols::WHILE), lexer.peek().view, STR_WHILE);
+	Token tok = lexer.next();
 
-	ctx.instruction(Symbols::WHILE, tok.view);
+	ast.node(Symbols::WHILE, tok.view);
 
 	// Expression.
-	ctx.instruction(Symbols::EXPR, tok.view);
-	src_parse_expression(ctx);
-	ctx.instruction(Symbols::END, ctx.peek().view);
+	parse_expression(ast, lexer);
 
 	// Body.
-	ctx.instruction(Symbols::EXPR, ctx.peek().view);
-	src_parse_expression(ctx);
-	ctx.instruction(Symbols::END, ctx.peek().view);
+	parse_expression(ast, lexer);
 }
 
-inline void src_parse_if(SourceContext& ctx) {
-	ctx.expect_token(equal(Symbols::IF), ctx.peek().view, STR_IF);
-	ctx.next();
+inline void parse_if(Context& ast, SourceLexer& lexer) {
+	lexer.expect(equal(Symbols::IF), lexer.peek().view, STR_IF);
+	lexer.next();
 
-	ctx.instruction(Symbols::IF, ctx.peek().view);
+	ast.node(Symbols::IF, lexer.peek().view);
 
 	// Expression.
-	ctx.instruction(Symbols::EXPR, ctx.peek().view);
-	src_parse_expression(ctx);
-	ctx.instruction(Symbols::END, ctx.peek().view);
+	parse_expression(ast, lexer);
 
 	// True block.
-	ctx.instruction(Symbols::EXPR, ctx.peek().view);
-	src_parse_expression(ctx);
-	ctx.instruction(Symbols::END, ctx.peek().view);
+	parse_expression(ast, lexer);
 
 	// False block.
-	ctx.instruction(Symbols::EXPR, ctx.peek().view);
-
-	if (ctx.peek().kind == Symbols::ELSE) {
-		ctx.next();
-		src_parse_expression(ctx);
+	if (lexer.peek().kind == Symbols::ELSE) {
+		lexer.next();  // Skip `else`
+		parse_expression(ast, lexer);
 	}
 
-	ctx.instruction(Symbols::END, ctx.peek().view);
+	// No false branch so we just emit an empty expression.
+	else {
+		ast.node(Symbols::EXPR, lexer.peek().view);
+		ast.node(Symbols::END, lexer.peek().view);
+	}
 }
 
-inline void src_parse_block(SourceContext& ctx) {
-	ctx.expect_token(equal(Symbols::BLOCK_OPEN), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::BLOCK_OPEN));
-	ctx.next();  // skip `{`
+inline void parse_block(Context& ast, SourceLexer& lexer) {
+	lexer.expect(equal(Symbols::BLOCK_OPEN), lexer.peek().view, STR_EXPECT, symbol_to_string(Symbols::BLOCK_OPEN));
+	lexer.next();  // skip `{`
 
-	ctx.instruction(Symbols::EXPR, ctx.peek().view);
+	while (eq_none(lexer.peek().kind, Symbols::BLOCK_CLOSE, Symbols::TERMINATOR))
+		parse_expression(ast, lexer);
 
-	while (eq_none(ctx.peek().kind, Symbols::BLOCK_CLOSE, Symbols::TERMINATOR))
-		src_parse_expression(ctx);
-
-	ctx.instruction(Symbols::END, ctx.peek().view);
-
-	ctx.expect_token(equal(Symbols::BLOCK_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::BLOCK_CLOSE));
-	ctx.next();  // skip `}`
+	lexer.expect(equal(Symbols::BLOCK_CLOSE), lexer.peek().view, STR_EXPECT, symbol_to_string(Symbols::BLOCK_CLOSE));
+	lexer.next();  // skip `}`
 }
 
-inline void src_parse_expression(SourceContext& ctx) {
-	ctx.instruction(Symbols::EXPR, ctx.peek().view);
+inline void parse_expression(Context& ast, SourceLexer& lexer) {
+	ast.node(Symbols::EXPR, lexer.peek().view);
 
-	switch (ctx.peek().kind) {
+	switch (lexer.peek().kind) {
+		case Symbols::CHARACTER:
+		case Symbols::STRING:
 		case Symbols::INTEGER: {
-			src_parse_literal(ctx);
+			parse_literal(ast, lexer);
 		} break;
 
 		case Symbols::IDENTIFIER: {
-			src_parse_call(ctx);
+			parse_call(ast, lexer);
 		} break;
 
 		case Symbols::COPY:
 		case Symbols::MOVE:
 		case Symbols::REMOVE: {
-			src_parse_intrinsic(ctx);
+			parse_intrinsic(ast, lexer);
 		} break;
 
 		case Symbols::WHILE: {
-			src_parse_while(ctx);
+			parse_while(ast, lexer);
 		} break;
 
 		case Symbols::IF: {
-			src_parse_if(ctx);
+			parse_if(ast, lexer);
 		} break;
 
 		case Symbols::BLOCK_OPEN: {
-			src_parse_block(ctx);
+			parse_block(ast, lexer);
 		} break;
 
-		default:
-			ctx.error(Phases::PHASE_SYNTACTIC, ctx.peek().view, STR_EXPR);
+		default: {
+			lexer.error(Phases::PHASE_SYNTACTIC, lexer.peek().view, STR_EXPR);
+		} break;
 	}
 
-	ctx.instruction(Symbols::END, ctx.peek().view);
+	ast.node(Symbols::END, lexer.peek().view);
 }
 
 
 // Statements
-inline Decl src_parse_annotation(SourceContext& ctx, View name, Symbols linkage) {
-	ctx.expect_token(common_is_type_annotation, ctx.peek().view, STR_ANNOTATION);
-	ctx.next();  // skip `(`
+inline void parse_annotation(Context& ast, SourceLexer& lexer, View name, Symbols linkage) {
+	lexer.expect(is_annotation, lexer.peek().view, STR_ANNOTATION);
+	lexer.next();  // skip `(`
 
 	size_t in = 0u;
 	size_t out = 0u;
 
-	while (ctx.peek().kind != Symbols::EFFECT_SEPERATOR) {
-		ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
-		ctx.next();  // skip identifier
+	// Parse input values.
+	while (lexer.peek().kind != Symbols::EFFECT_SEPERATOR) {
+		lexer.expect(equal(Symbols::IDENTIFIER), lexer.peek().view, STR_IDENTIFIER);
+		lexer.next();  // skip identifier
 		in++;
 	}
 
-	ctx.expect_token(equal(Symbols::EFFECT_SEPERATOR), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_SEPERATOR));
-	ctx.next();  // skip `->`
+	lexer.expect(equal(Symbols::EFFECT_SEPERATOR), lexer.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_SEPERATOR));
+	lexer.next();  // skip `->`
 
-	while (ctx.peek().kind != Symbols::EFFECT_CLOSE) {
-		ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
-		ctx.next();  // skip identifier
+	// Parse output values.
+	while (lexer.peek().kind != Symbols::EFFECT_CLOSE) {
+		lexer.expect(equal(Symbols::IDENTIFIER), lexer.peek().view, STR_IDENTIFIER);
+		lexer.next();  // skip identifier
 		out++;
 	}
 
-	ctx.expect_token(equal(Symbols::EFFECT_CLOSE), ctx.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_CLOSE));
-	ctx.next();  // skip `)`
+	lexer.expect(equal(Symbols::EFFECT_CLOSE), lexer.peek().view, STR_EXPECT, symbol_to_string(Symbols::EFFECT_CLOSE));
+	lexer.next();  // skip `)`
 
-	// Store type signature.
-	auto [it, succ] = ctx.decl(name, Effect { in, out }, linkage);
-
-	if (not succ)
-		ctx.error(Phases::PHASE_SEMANTIC, name, STR_MULTIPLE_DECLARED, name);
-
-	ctx.instruction(linkage, name, in, out);
-
-	return it->second;
+	ast.node(linkage, name, in, out);
+	ast.decl(name, in, out);
 }
 
-inline void src_parse_decl(SourceContext& ctx) {
-	ctx.expect_token(src_is_decl, ctx.peek().view, STR_DECL);
-	Symbols linkage = ctx.peek().kind;
-	ctx.next();
+inline void parse_decl(Context& ast, SourceLexer& lexer) {
+	lexer.expect(is_decl, lexer.peek().view, STR_DECL);
+	Symbols linkage = lexer.peek().kind;
+	lexer.next();  // Skip decl/extern
 
-	ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
-	View name = ctx.peek().view;
-	ctx.next();
+	lexer.expect(equal(Symbols::IDENTIFIER), lexer.peek().view, STR_IDENTIFIER);
+	View name = lexer.peek().view;
+	lexer.next();  // Skip identifier.
 
-	src_parse_annotation(ctx, name, linkage);
+	parse_annotation(ast, lexer, name, linkage);
 }
 
-inline void src_parse_fn(SourceContext& ctx) {
-	ctx.expect_token(equal(Symbols::FN), ctx.peek().view, STR_FN);
-	ctx.next();  // skip `fn`
-
-	ctx.expect_token(equal(Symbols::IDENTIFIER), ctx.peek().view, STR_IDENTIFIER);
-	View name = ctx.peek().view;
-	ctx.next();
-
-	Decl decl;
+inline void parse_fn(Context& ast, SourceLexer& lexer) {
+	lexer.expect(equal(Symbols::IDENTIFIER), lexer.peek().view, STR_FN);
+	View name = lexer.peek().view;
+	lexer.next();  // Skip identifier.
 
 	// Inline declaration.
-	if (common_is_type_annotation(ctx.peek().kind))
-		decl = src_parse_annotation(ctx, name, Symbols::DECL);
+	if (is_annotation(lexer.peek().kind))
+		parse_annotation(ast, lexer, name, Symbols::DECL);
 
-	// Split declaration.
-	else {
-		auto it = ctx.decls.find(name);
-
-		if (it == ctx.decls.end())
-			ctx.error(Phases::PHASE_SEMANTIC, name, STR_UNDECLARED, name);
-
-		decl = it->second;
-	}
-
-	auto [effect, linkage] = decl;
-
-	ctx.instruction(Symbols::FN, name);
+	ast.node(Symbols::FN, name);
 
 	// Body.
-	src_parse_expression(ctx);
+	parse_expression(ast, lexer);
 }
 
-inline void src_parse_statement(SourceContext& ctx) {
-	switch (ctx.peek().kind) {
+inline void parse_statement(Context& ast, SourceLexer& lexer) {
+	switch (lexer.peek().kind) {
 		case Symbols::DECL:
-		case Symbols::EXTERN:
-			return src_parse_decl(ctx);
+		case Symbols::EXTERN: {
+			parse_decl(ast, lexer);
+		} break;
 
-		case Symbols::FN:
-			return src_parse_fn(ctx);
+		case Symbols::IDENTIFIER: {
+			parse_fn(ast, lexer);
+		} break;
 
-		default:
-			ctx.error(Phases::PHASE_SYNTACTIC, ctx.peek().view, STR_STMT);
+		default: {
+			lexer.error(Phases::PHASE_SYNTACTIC, lexer.peek().view, STR_STMT);
+		} break;
 	}
 }
 
-inline void src_parse(SourceContext& ctx) {
-	ctx.instruction(Symbols::PROGRAM, ctx.peek().view);
+inline Context parse(SourceLexer& lexer) {
+	Context ast;
+	ast.node(Symbols::PROGRAM, lexer.peek().view);
 
-	while (ctx.peek().kind != Symbols::TERMINATOR)
-		src_parse_statement(ctx);
+	while (lexer.peek().kind != Symbols::TERMINATOR)
+		parse_statement(ast, lexer);
 
-	ctx.instruction(Symbols::END, ctx.peek().view);
+	ast.node(Symbols::END, lexer.peek().view);
+
+	return ast;
 }
 
 }

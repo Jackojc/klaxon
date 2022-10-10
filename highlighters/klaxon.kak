@@ -15,7 +15,7 @@ provide-module -override klx %{
 	add-highlighter shared/klx/other/ regex "(\s|^)\K(0b[0-1]{8})(\s|$)(0b[0-1]{8}(\s|$))*" 0:value                # binary
 
 	# keywords and operators
-	add-highlighter shared/klx/other/ regex "\b(move|copy|remove|while|if|else|fn|decl|extern)\b" 0:keyword
+	add-highlighter shared/klx/other/ regex "\b(move|copy|remove|while|if|else|decl|extern)\b" 0:keyword
 
 	# string
 	add-highlighter shared/klx/string region '"' (?<!\\)(\\\\)*" group
@@ -26,7 +26,7 @@ provide-module -override klx %{
 hook global BufCreate .*\.(klx) %{ set-option buffer filetype klx }
 hook global WinSetOption filetype=klx %{ require-module klx }
 
-hook -group wpp-highlight global WinSetOption filetype=klx %{
+hook -group klx-highlight global WinSetOption filetype=klx %{
 	add-highlighter window/klx ref klx
 	hook -once -always window WinSetOption filetype=.* %{ remove-highlighter window/klx }
 }

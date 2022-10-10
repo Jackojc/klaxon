@@ -23,7 +23,7 @@ inline IR::iterator ast_print(
 		// Statements.
 		case Symbols::EXTERN:
 		case Symbols::DECL: {
-			indent(); printlnfmt("{} ( {} -> {} )", current->kind, current->x, current->y);
+			indent(); printlnfmt("{} {} ( {} -> {} )", current->kind, current->sv, current->x, current->y);
 			it++;
 		} break;
 

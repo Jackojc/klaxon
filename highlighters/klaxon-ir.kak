@@ -18,7 +18,7 @@ provide-module -override kir %{
 hook global BufCreate .*\.(kir) %{ set-option buffer filetype kir }
 hook global WinSetOption filetype=kir %{ require-module kir }
 
-hook -group wpp-highlight global WinSetOption filetype=kir %{
+hook -group kir-highlight global WinSetOption filetype=kir %{
 	add-highlighter window/kir ref kir
 	hook -once -always window WinSetOption filetype=.* %{ remove-highlighter window/kir }
 }

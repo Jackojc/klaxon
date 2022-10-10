@@ -10,7 +10,7 @@ comment ::= ? #.+$ ?
 // INTERMEDIATE RULES
 program ::= <statement>+
 
-statement ::= <def> | <decl>
+statement ::= <fn> | <decl>
 expression ::= (
 		<literal> |
 		<while> |
@@ -22,19 +22,19 @@ expression ::= (
 
 
 // MISC
-effect ::= '(' <identifier>* [ '->' <identifier>* ] ')'  // ( x y -> z )
+effect ::= '(' <identifier>* '->' <identifier>* ')'  // ( x y -> z )
 
 
 // STATEMENTS
-// def neg { { 1 2 - } * }
-def ::= 'def' <identifier> <expression>
+// neg ( x -> x ) { { 1 2 - } * }
+fn ::= <identifier> [ <effect> ] <expression>
 
-// decl foo (int int -> int)
+// decl foo ( a b -> q )
 decl ::= ( 'decl' | 'extern' ) <identifier> <effect>
 
 
 // EXPRESSIONS
-// if =1 { "true" print } { "false" print }
+// if { dup =1 } { "true" println } else { "false" println }
 if ::= 'if' <expression> <expression> [ 'else' <expression> ]
 
 // while { dup 10 < }
@@ -54,7 +54,6 @@ ops ::= (
 		'word'
 	)
 
-// at @3
 intrinsic ::= <ops> | <arg_intrinsic>
 arg_intrinsic ::= ( 'copy' | 'move' | 'remove' ) <literal>
 

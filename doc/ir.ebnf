@@ -9,10 +9,10 @@ effect ::= '(' <int> '->' <int> ')'
 
 decl ::= ( 'intern' | 'extern' ) <identifier> <effect>
 block ::= 'block' <int> <instruction>* 'end'
-def ::= 'def' <identifier> <block>+ 'ret'
+fn ::= 'fn' <identifier> <block>+ 'ret'
 
 instruction ::=
-	( 'load' <int> <int> ) |  // Set a register to a literal value
+	( 'let' <int> <int> ) |  // Set a register to a literal value
 	( 'copy' <int> <int> ) |  // Copy a register to another register
 
 	( 'push' <int> ) |  // Push value in register to stack
@@ -22,4 +22,4 @@ instruction ::=
 	( 'jump' <int> ) |
 	( 'branch' <int> <int> )
 
-program ::= ( <def> | <block> | <decl> )+
+program ::= ( <fn> | <block> | <decl> )+
